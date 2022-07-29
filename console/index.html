@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<script>
+    window.addEventListener("error", alert);
+    window.addEventListener("error", errAlert);
+    function errAlert(arg1, arg2, arg3, arg4, arg5) {
+        if (arg1) {
+            var str = ""
+            for (var key in arg1) {
+                str += "\n" + key + ": " + arg1[key];
+            }
+            alert(str);
+        }
+    }
+</script>
+<head>
+    <!--link rel="stylesheet" type="text/css" href="console.css"-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--script type="text/javascript" src="fetchPolyfill.js" /-->
+    <script type="text/javascript" src="console.js" id="script"></script>
+    <style>
+        body, main, footer, header {
+            margin-left: 0;
+            margin-right: 0;
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        header, #pageURL, #loadURL {
+            font-family: monospace;
+            margin: 1em 1em 0;
+        }
+
+        header {
+            padding: 1em;
+            margin: 0;
+        }
+
+        body, main {
+            padding: 0;
+            margin: 0;
+        }
+
+        #pageFrame {
+            box-sizing: border-box;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+            border-top: 1px solid black;
+            border-bottom: 1px solid black;
+            border-left: none;
+            border-right: none;
+        }
+
+        #pageFrame.hidden { 
+            visibility: hidden !important;
+            width: 0 !important;
+            height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: 0 !important;
+        }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <label for="pageURL" id="label">Enter the url of the page to load, relative to the root of the domain</label>
+        <input type="text" id="pageURL" value="index.html" />
+        <button onclick="openInFrame();" id="loadInFrame">Load in frame</button>
+        <button onclick="newWindow();" id="loadInWindow">Load in new window</button>
+    </header>
+
+    <main>
+        <iframe id="pageFrame"></iframe>
+    </main>
+
+    <footer><div id="consoleDiv"></div></footer>
+</body>
+<script type="text/javascript">
+    if (window.origin) {
+        document.getElementById("label").innerText += "\n" + window.origin + "/";
+    } else {
+        document.getElementById("label").innerText += "\n" + window.location.protocol + "//" + window.location.hostname + "/";
+    }
+
+    var webconsole = new WebConsole(document, document.getElementById("pageFrame").contentWindow);
+
+    function openInFrame() {
+        var frame = document.getElementById("pageFrame");
+        frame.classList.remove("hidden");
+        frame.contentWindow.location.replace('/' + document.getElementById('pageURL').value);
+    }
+
+    function newWindow() {
+        var frame = document.getElementById("pageFrame");
+        frame.contentDocument.documentElement.innerHTML = "";
+        frame.classList.add("hidden");
+
+        webconsole.newWindow(window.open('/' + document.getElementById('pageURL').value));
+    }
+</script>
+</html>

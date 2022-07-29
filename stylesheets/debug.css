@@ -1,0 +1,10 @@
+table.debug {
+    border: 2px solid black;
+    border-collapse: collapse;
+}
+
+table.debug > tbody > tr > td {
+    border: 1px solid #DDD;
+    padding: 0.5em 1em;
+    vertical-align: top;
+}

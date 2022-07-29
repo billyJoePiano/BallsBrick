@@ -1,0 +1,461 @@
+/* note styling specific to the outer container page is embedded in the head of that page
+   styling specific to the inner frame page is qualified with the #consoleFrameDoc parent selector,
+   which is applied to the root document in that iframe, programatically by js
+
+    this is intended to let you place the console as an element within another webpage if you want, without effeecting the style of that page
+*/
+
+#consoleDiv {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+#consoleDiv * {
+    font-family: "Courier New", Courier, "Andale Mono", FreeMono, monospace;
+    font-size: 12px;
+}
+
+#consoleOutput {
+    width: calc(100% - 2em);
+    height: 100%;
+    margin: 1em 0 0 1em;
+    border: 1px solid #AAA;
+    overflow: scroll;
+    clear: both;
+}
+
+#consoleDiv .hidden {
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+}
+
+
+
+/* command line styling */
+
+#commandLine, #commandLineContainer {
+    color: black;
+    border: none;
+    outline: none;
+    padding: 0;
+    margin: 0;
+    background-color: #DDD;
+}
+
+#commandLineContainer {
+    box-sizing: border-box;
+    width: calc(100% - 1em);
+    border: 1px solid #AAA;
+}
+
+#commandLine {
+    box-sizing: border-box;
+    display: inline;
+    padding-left: 0.5em;
+    width: calc(100% - 5em);
+    max-width: calc(100% - 5em);
+    height: 1.5em;
+    min-height: 1em;
+    resize: both;
+}
+
+
+#commandLineContainer button,  #buttonsContainer button {
+    display: inline-block;
+    box-sizing: border-box;
+    border-radius: 0.3em;
+    border: 1px solid #AAA;
+    background-color: #EEE;
+    vertical-align: top;
+}
+
+#submitCommandLine {
+    color: #77F;
+    padding: 0 0 0 2em;
+    margin: 0;
+    float:left;
+}
+
+#clearCommandLine {
+    float: right;
+}
+
+
+
+
+
+/* output div styling */
+
+#consoleOutput * {
+    white-space: pre-wrap;
+    color: black;
+    padding: 0;
+    margin: 0;
+    border: none;
+    display: block;
+    max-width: 100%;
+}
+
+#consoleOutput .group * {
+    padding-top: 0.2em;
+    padding-bottom: 0.2em;
+}
+
+#consoleOutput > .group:first-child {
+    margin-top: 0.5em;
+}
+
+#consoleOutput > .group:last-child {
+    margin-bottom: 0.5em;
+}
+
+#consoleOutput .group > :last-child {
+    padding-bottom: 0.1em;
+}
+
+#consoleOutput .group > :first-child {
+    padding-top: 0.1em;
+}
+
+#consoleOutput > .group {
+    border-bottom: 1px solid lightgray;
+}
+
+#consoleOutput > .group:first-child {
+    border-top: 1px solid lightgray;
+}
+
+
+#consoleOutput pre.command, #consoleOutput pre.return, #consoleOutput pre.log {
+    padding-left: 2em;
+    text-indent: -2em;
+}
+
+#consoleOutput pre.command::before, #consoleOutput pre.return::before, #consoleOutput pre.log::before, #submitCommandLine {
+    content: "  ";
+    font-weight: 900;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    outline: none;
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0); /* mobile webkit */
+}
+
+#consoleOutput pre.command::before {
+    content: "> ";
+    color: #666;
+}
+
+#consoleOutput pre.return::before {
+    content: "< ";
+    color: #AAA;
+}
+
+
+/*style entries based on type*/
+
+pre.command {
+    font-weight: bold;
+}
+
+#consoleOutput .error {
+    background-color: lightcoral;
+    color: maroon;
+    padding-bottom: 0.3em;
+    padding-top: 0.3em;
+    border-top: 1px solid maroon;
+    border-bottom: 1px solid maroon;
+}
+
+#consoleOutput .number, #consoleOutput .boolean {
+    color: blue;
+    font-style: normal;
+}
+
+#consoleOutput .string.return, #consoleOutput .return .string, #consoleOutput .string.value {
+    color: #C22;
+    font-style: normal;
+}
+
+#consoleOutput .undefined, #consoleOutput .null {
+    color: #888;
+    font-style: normal;
+}
+
+#consoleOutput .function {
+    color: #00B;
+    font-style: italic;
+}
+
+#consoleOutput .expandable, #consoleOutput .collapsible {
+    cursor: pointer;
+}
+
+/*collapsible / expandable function bodies */
+
+#consoleOutput .expandable::after, #consoleOutput .collapsible::after {
+    content: "<    ... press to expand ...   >";
+    display: block;
+    margin-left: 2em;
+    -khtml-opacity: .50;
+    -moz-opacity: .50;
+    -ms-filter: "alpha(opacity=50)";
+    filter: alpha(opacity=50);
+    opacity: .50;
+}
+
+#consoleOutput .collapsible::after {
+    content: ">  press to collapse  <";
+}
+
+
+#consoleOutput .object {
+    color: #666;
+    font-style: italic;
+    cursor: pointer;
+}
+
+
+/*NOTE: THIS IS PROBABLY NO LONGER NECCESSARY... REMOVE? move the divider line to the bottom of the details div when details are spread*/
+/*#consoleOutput pre.object.detailsSpread {
+    border-bottom: none;
+}*/
+
+#consoleOutput .details {
+    padding-left: 2em;
+    padding-bottom: 0.3em;
+    /*font-style: normal;    is this neccessary? */
+}
+
+#consoleOutput .return + .details, #consoleOutput .log + .details {
+    /*the first details indentation needs to account for the margin of the carat ::before pseudo-element*/
+    padding-left: 3em;
+}
+
+#consoleOutput .detailsSpread > .medium {
+    /*hide the medium description while details are spread*/
+    display: none;
+}
+
+#consoleOutput .keyValuePair {
+    padding: 0.1em 0;
+}
+
+#consoleOutput span, #consoleOutput span.short, #consoleOutput span.medium {
+    /*eliminate padding/margins and inline-block properties for spans used in medium description*/
+    display: inline;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: 0;
+    margin-right: 0;
+    text-indent: 0;
+}
+
+#consoleOutput .key {
+    display: inline-block;
+    font-style: normal;
+    padding-right: 0;
+    color: #881391;
+    font-weight: 600;
+}
+
+#consoleOutput .key.nonenum {
+    color: #B871BD;
+}
+
+#consoleOutput .key:not(span) {
+    vertical-align: top;
+}
+
+#consoleOutput .value {
+    display: inline-block;
+    padding-left: 1em;
+}
+
+#consoleOutput .info {
+    background-color: #EEF
+}
+
+
+
+
+
+/*Buttons container*/
+
+#buttonsContainer {
+    margin: 0 0 1em;
+    padding: 0;
+    border: none;
+    float: left;
+}
+
+#buttonsContainer div.buttonSubDiv {
+    display: inline-block;
+    padding: 0.5em;
+    margin: 0.25em;
+    border: 1px solid #AAA;
+    vertical-align: top;
+    float: left;
+}
+
+#buttonsContainer .buttonSubDivXout {
+    float: right;
+    margin: 0;
+    vertical-align: top;
+    position: relative;
+    right: -0.5em;
+    top: -0.5em;
+    background-color: initial;
+    border: initial;
+    border-radius: initial;
+    font-family: initial;
+}
+
+#buttonsContainer .off {
+    background-color: #FAA;
+}
+
+#buttonsContainer .on {
+    background-color: #AFA;
+}
+
+#buttonsContainer button {
+    float: left;
+    padding: 0.1875em 0.4375em;
+    margin: 0.125em;
+}
+
+#buttonsContainer #returnAction {
+    margin-left: 0;
+    margin-top: 0;
+    font-size: 18px;
+}
+
+
+
+
+
+/*Options container*/
+#optionsContainer {
+    margin: 0.5em 1em 1em;
+    padding: 1em;
+    border: 1px solid black;
+    border-radius: 1em;
+    display: block;
+    overflow: auto;
+    clear: left;
+}
+
+#optionsContainer * {
+    margin: 0.5em;
+}
+
+/* see also above -- #optionsOuterDiv button  */
+
+#optionsContainer > div:not(#optionsButtons) {
+    display: inline-block;
+}
+
+#optionsContainer .border {
+    padding: 0.5em;
+    margin: 1.5em 0.5em;
+    border: 1px solid #AAA;
+    vertical-align: top;
+    float: left;
+}
+
+#optionsContainer .divLabel {
+    font-weight: bold;
+    margin-top: 1em;
+    display: block;
+}
+
+#optionsContainer .border > .divLabel:nth-child(1) {
+    position: relative;
+    top: -1.75em;
+    padding-bottom: 0;
+    padding-top: 0;
+    margin-bottom: -1em;
+    margin-top: 0;
+}
+
+#optionsContainer .border > .divLabel.tall:nth-child(1) {
+    top: -2.5em;
+    margin-bottom: -2.5em;
+}
+
+#optionsContainer table, #optionsContainer .float {
+    float: left;
+}
+
+#optionsContainer .floatBottom {
+    float: left;
+    vertical-align: bottom;
+}
+
+
+#optionsContainer table, #optionsContainer tbody, #optionsContainer tr, #optionsContainer td {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+#optionsContainer table th {
+    vertical-align: bottom;
+}
+
+#optionsContainer table th:nth-child(1) {
+    white-space: pre-wrap;
+    text-align: left;
+}
+
+#optionsContainer table tr > td:nth-child(1) {
+    white-space: pre; /*overriding pre-wrap*/
+    text-align: right;
+}
+
+#optionsContainer table tr > td[colspan="10"]:nth-child(1) {
+    white-space: pre-wrap; /*excepting footer notes from this format*/
+    text-align: left;
+}
+
+#optionsContainer table tr > td:nth-child(2) {
+/*    white-space: pre; /*overriding pre-wrap  note causes issues in prettified html*/
+    text-align: left;
+}
+
+#optionsContainer table tr > td:nth-child(3) {
+    white-space: pre; /*overriding pre-wrap*/
+    text-align: left;
+}
+
+#optionsContainer table tr > td:nth-child(1)[colspan="2"] {
+    text-align: center;
+}
+
+
+#optionsContainer p {
+    font-style: italic;
+    margin-top: 0.25em;
+}
+
+#optionsContainer input[type="number"] {
+    width: 6em;
+}
+
+#optionsContainer input[type="number"] + label { /*numerical units e.g. ms or px*/
+    margin-left: 0;
+}
+
+#optionsContainer .clearFloat {
+    clear: left;
+}

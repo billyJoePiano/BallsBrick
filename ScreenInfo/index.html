@@ -1,0 +1,59 @@
+<html>
+<head>
+    <script type="text/javascript" src="../js/object.unfreezable.js" defer></script>
+    <script type="text/javascript" src="../js/reflector.functions.js" defer></script>
+    <script type="text/javascript" src="../js/reflector.objects.js" defer></script>
+    <script type="text/javascript" src="../js/reflect.js" defer id="reflect"></script>
+
+    <script>
+const initializeLogger = undefined;
+const CONSTANTS = {};
+
+document.getElementById("reflect").onload = () => {
+    let documentOutputString;
+    let element;
+    try {
+        element = document.body.appendChild(document.createElement('a'));
+
+        let reflector = new ObjectReflector();
+        reflector.valueReplacer = ObjectReflector.valueReplacers.functionsToString;
+        reflector.includeFunctions = true;
+        reflector.includeClass = true;
+        reflector.suppressToJSON = true;
+
+        let text = JSON.stringify(reflector.reflect(window));
+        element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+        element.setAttribute('download', "Window_Capture.txt");
+
+        element.style.display = 'none';
+        element.click();
+
+        documentOutputString = "SUCCESS!\nYou should see a file called Window_Capture.txt downloading right now"
+
+    } catch(err) {
+        documentOutputString = "--ERROR--\n";
+
+        try {
+            documentOutputString += "toString() :\n" + err.toString() + "\n";
+
+        } catch (e) { }
+
+        try {
+            documentOutputString += "\n.stack :\n" + err.stack + "\n";
+
+        } catch(e) { }
+    }
+
+    if(element) document.body.removeChild(element);
+
+    document.body.appendChild(document.createElement("code")).innerText = "\n\n" + documentOutputString;
+}
+    </script>
+
+</head>
+<body>
+    <main>
+        <h1 style="font-family: sans-serif">Love you Michelle!!</h1>
+    </main>
+</body>
+</html>

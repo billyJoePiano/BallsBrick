@@ -1,0 +1,606 @@
+"use strict"; document.currentScript.initTime = performance.now();
+
+class UI {
+    constructor(canvas, targetObject) {
+        this.canvas = canvas;
+        this.object = targetObject;
+        this.context = canvas.getContext("2d");
+
+        UI.uis.push(this);
+        UI.canvases.push(canvas)
+        UI.contexts.push(this.context);
+
+        if (!this.context) {
+            alert("no rendering context"); console.log(canvas);
+        }
+
+        this.listeners = new Array();
+
+        canvas.redraw = () => this.object?.draw?.(this.context);
+
+        if (targetObject) this.installNewTargetObject(targetObject);
+    }
+
+    addDefaultListeners(object = this.object) { //object with the normal pointer functions, listed below
+        this.canvas.ondragstart = () => { return false; }
+
+        let i = this.listeners.length;
+
+        this.listeners.push([POINTER_OVER, this.object.pointerover?.bind(object)]);
+        this.listeners.push([POINTER_MOVE, this.object.pointermove?.bind(object)]);
+        this.listeners.push([POINTER_DOWN, this.object.pointerdown?.bind(object)]);
+        this.listeners.push([POINTER_UP, this.object.pointerup?.bind(object)]);
+        this.listeners.push([POINTER_OUT, this.object.pointerout?.bind(object)]);
+        this.listeners.push([POINTER_CANCEL, this.object.pointercancel?.bind(object)]);
+
+        for (; i < this.listeners.length; i++) {
+            this.canvas.addEventListener(...(this.listeners[i]));
+        }
+    }
+
+    removeListener(name) { //convienence method
+        let found = false;
+        for (; i < this.listeners.length; i++) {
+            if (listeners[i][0] == name) {
+                this.canvas.removeEventListener(...listener);
+                this.listeners.splice(i, 1);
+                i--;
+                found = true;
+            }
+        }
+        if(!found) throw new Error("listener with submitted name was not found!");
+    }
+
+    removeListeners() { //removes all current listeners managed by this ui object
+        this.listeners.forEach((listener) => {
+            this.canvas.removeEventListener(...listener);
+        });
+        this.listeners.length = 0;
+    }
+
+    addListener(name, func) {
+        this.canvas.addEventListener(name, func);
+        this.listeners.push([name, func]);
+    }
+
+    installNewTargetObject(targetObject, drawImmediately = true) {
+        this.removeListeners();
+        this.object?.escapeFromClick?.();
+
+
+        if (this.context && (this.object?.context === this.context)) delete this.object.context;
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height)
+
+        this.object = targetObject;
+        if (targetObject) {
+            targetObject.ui = this;
+            targetObject.canvas = this.canvas;
+            targetObject.context = this.context;
+            this.addDefaultListeners();
+            if (drawImmediately) targetObject.draw(this.context);
+        }
+    }
+
+    static outputWindowStyling() {
+        let boardRect = UI.board.canvas.getBoundingClientRect();
+        let editorRect = UI.editor.canvas.getBoundingClientRect();
+        console.log("Board canvass bounding client rect: " + ObjectReflector.stringify(boardRect));
+        console.log("Editor canvass bounding client rect: " + ObjectReflector.stringify(editorRect));
+        /*try {
+            downloadStringToLocal("window.json", ObjectReflector.stringify(window));
+        } catch (err) {
+            console.log(err);
+        }*/
+        
+    }
+}
+
+UI.background = BLACK;
+UI.uis = new Array();
+UI.canvases = new Array();
+UI.contexts = new Array();
+UI.board = new UI(document.getElementById("boardCanvas"));
+UI.editor = new UI(document.getElementById("editorCanvas"));
+
+UI.freezeScroll = function freezeScroll() {
+    document.documentElement.style.overflow = "hidden";
+}
+
+UI.unfreezeScroll = function unfreezeScroll() {
+    document.documentElement.style.overflow = "";
+}
+
+Board.prototype.pointermove = function (event) {
+    let towards = new Position(event.offsetX, event.offsetY);
+    if (towards && this.inside(towards)) {
+        this.aim(towards);
+
+    } else {
+        this.aim();
+    }
+}
+
+Board.prototype.pointerout = function (event) {
+    UI.unfreezeScroll();
+    this.aim(); //removes the aiming lines
+}
+
+Board.prototype.pointerdown = function (event) {
+    UI.freezeScroll();
+}
+
+Board.prototype.pointerup = function (event) {
+    UI.unfreezeScroll();
+    let fireTowards = new Position(event.offsetX, event.offsetY);
+    if (this.inside(fireTowards)) {
+        if (event.shiftKey) {
+            board.ballOrigin.x = event.offsetX;
+            board.ballOrigin.y = event.offsetY;
+            board.balls.forEach((ball) => {
+                ball.setPosition(event.offsetX, event.offsetY);
+            });
+        } else {
+            fireTime = performance.now();
+            this.fire(fireTowards);
+        }
+    }
+}
+
+class Container extends ObjectWithRectangle {
+    constructor(x, y, width, height, objects = []) {
+        super(x, y, width, height);
+        this.objects = [...objects];
+    }
+
+    pointerover(event) { this.objects.forEach((object) => { object.pointerover?.(event); }); }
+    pointermove(event) { this.objects.forEach((object) => { object.pointermove?.(event); }); }
+    pointerdown(event) { this.objects.forEach((object) => { object.pointerdown?.(event); }); }
+    pointerout(event) { this.objects.forEach((object) => { object.pointerout?.(event); }); }
+    pointerup(event) { this.objects.forEach((object) => { object.pointerup?.(event); }); }
+    pointercancel(event) { this.objects.forEach((object) => { object.pointercancel?.(event); }); }
+
+    draw(context = this.context) {
+        if (this.visible !== false && this.context !== undefined) {
+            context.clearRect(this.x, this.y, this.width, this.height);
+            this.objects.forEach((object) => object.draw(context));
+        }
+    }
+
+    set context(value) {
+        this.ctx = value;
+        this.objects.forEach((object) => { object.context = value; });
+    }
+
+    get context() { return this.ctx; }
+
+    set visible(value) {
+        this.vsbl = value;
+        this.objects.forEach((object) => { object.visible = value; });
+    }
+
+    get visible() { return this.vsbl; }
+}
+
+class ClickableObject extends ObjectWithRectangle {
+    /* ui interface for buttons, board editor, etc, that simplifies the pointer events
+     * maintains 'this.pointerFlags' object
+     * sub-classes should implement the following methods:
+     * pointerEvent(event) for when the status of a pointerFlag OTHER THAN POSITION has changed
+     * pointerMove(event) for when the pointerMoves but no flags have changed
+     * click(event) for when the object is fully clicked,
+     *   ...meaning a pointer is depressed and released both while 'hovering' over the object, and there are no other pointers depressed over the containing canvass
+     */
+    constructor(rectangle, click, pointerEvent, pointerMoved) {
+        super(rectangle);
+        if(click) this.click = click;
+        if (pointerEvent) this.pointerEvent = pointerEvent;
+        if (pointerMoved) this.pointerMoved = pointerMoved;
+
+        this.pointerFlags = {
+            position: new Position(),
+            depressedPointers: [false, false, false, false, false], //each (potential) pointerId.  not sure how many to create
+            hoverPointers: [false, false, false, false, false],
+            hover: false,
+            cancelPossible: false,
+            depressed: false,
+            depressedAndOver: false,
+            escapeFromClick: false
+        }
+        this.pointerFlags.position.x = undefined;
+        this.pointerFlags.position.y = undefined;
+    }
+
+
+    logEvent(event) { console.log(event.type + "        offset: (" + event.offsetX + " , " + event.offsetY + ")   client: (" + event.clientX + " , " + event.clientY + ")    document: "); }
+
+    updateHoverFlag(event) {
+        if (event.type === POINTER_OUT) return this.pointerFlags.hoverPointers[event.pointerId] !== (this.pointerFlags.hoverPointers[event.pointerId] = false);
+        return this.pointerFlags.hoverPointers[event.pointerId] !== (this.pointerFlags.hoverPointers[event.pointerId] = this.rectangle.inside(event.offsetX, event.offsetY));
+    }
+    updatePointerFlags(event) { //updates the values, and returns true if changed, false if stayed the same
+        let changed = this.updateHoverFlag(event);
+        let hover = false;
+        let cancelPossible = false;
+        let depressed = false;
+        let depressedAndOver = false;
+        let length = Math.max(this.pointerFlags.hoverPointers.length, this.pointerFlags.depressedPointers.length);
+        for (let i = 0; i < length; i++) {
+            hover = hover || this.pointerFlags.hoverPointers[i];
+            cancelPossible = cancelPossible || (this.pointerFlags.depressedPointers[i] && !this.pointerFlags.hoverPointers[i]);
+            depressed = depressed || this.pointerFlags.depressedPointers[i];
+            depressedAndOver = depressedAndOver || (this.pointerFlags.depressedPointers[i] && this.pointerFlags.hoverPointers[i]);
+        }
+        if (this.pointerFlags.escapeFromClick) {
+            if (!depressed) {
+                this.pointerFlags.escapeFromClick = false;
+                changed = true;
+            } else depressed = cancelPossible = depressedAndOver = false;
+        }
+
+        changed = this.pointerFlags.hover !== (this.pointerFlags.hover = hover)                                     || changed;  //'changed' must be on the right-hand side of the 'or' operator to ensure that the first expression (which includes an assignment) is evaluted
+        changed = this.pointerFlags.cancelPossible !== (this.pointerFlags.cancelPossible = cancelPossible)          || changed;
+        changed = this.pointerFlags.depressed !== (this.pointerFlags.depressed = depressed)                         || changed;
+        changed = this.pointerFlags.depressedAndOver !== (this.pointerFlags.depressedAndOver = depressedAndOver)    || changed;
+        if (hover) {
+            this.pointerFlags.position.x = event.offsetX;
+            this.pointerFlags.position.y = event.offsetY;
+        } else {
+            this.pointerFlags.position.x = undefined;
+            this.pointerFlags.position.y = undefined;
+        }
+        return changed;
+    }
+
+    pointerover(event) { if (this.updatePointerFlags(event)) this.pointerEvent?.(event); }
+    pointerout(event) {
+        let changed = this.updatePointerFlags(event);
+        this.pointerFlags.position.x = undefined;
+        this.pointerFlags.position.y = undefined;
+        if (changed) this.pointerEvent?.(event);
+    }
+    pointermove(event) {
+        let changed = this.updatePointerFlags(event);
+        if (changed) this.pointerEvent?.(event);
+        else this.pointerMoved?.(event);
+
+        /*let changed = this.updateHoverFlag(event);
+        if (this.pointerFlags.hoverPointers[event.pointerId]) this.pointerMoved?.(event);
+        if (this.updatePointerFlags(event) || changed) this.pointerEvent?.(event);*/
+    }
+
+    pointerdown(event) { //with pointer capture... may want a version of this function without pointer capture
+        let changed = this.updateHoverFlag(event);
+        if (this.pointerFlags.hoverPointers[event.pointerId]) {
+            this.pointerFlags.depressedPointers[event.pointerId] = true;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            this.updatePointerFlags(event);
+            this.pointerEvent?.(event);
+        } else if (this.updatePointerFlags(event) || changed) {
+            this.pointerEvent?.(event);
+        }
+    }
+
+    pointerup(event) {
+        if (this.pointerFlags.depressedPointers[event.pointerId] !== (this.pointerFlags.depressedPointers[event.pointerId] = false)  && !this.pointerFlags.escapeFromClick) {
+            this.updatePointerFlags(event)
+            if (this.pointerFlags.hoverPointers[event.pointerId] && !this.pointerFlags.depressed)
+                this.click?.(event);
+            else this.pointerEvent?.(event);
+        } else if (this.updatePointerFlags(event)) {
+            this.pointerEvent?.(event);
+        }
+    }
+
+    pointercancel(event) {
+        //this.logEvent(event);
+        this.depressed[event.pointerId] = false;
+        this.updatePointerFlags(event)
+        this.pointerEvent?.(event);
+    }
+
+    escapeFromClick() {
+        this.pointerFlags.depressed = this.pointerFlags.depressedAndOver = this.pointerFlags.cancelPossible = false;
+        this.pointerFlags.escapeFromClick = true;
+        //trigger event?  Maybe not... there's no event to pass, and the sub-class should have called this method to begin with, so should handle that itself
+    }
+}
+
+
+class Button extends ClickableObject {
+    
+    constructor(rectangle, text, objectToDraw, functionOnClick) {
+        super(rectangle, undefined, Button.prototype.updateCurrentColor); //'click' is undefined here because it is already part of this class, does not need to be assigned in super's constructor
+        if (text instanceof DisplayText) this.tx = text; else this.tx = new DisplayText(text);
+        this.visible = true;
+        this.objectToDraw = objectToDraw;
+
+        if(functionOnClick !== undefined) this.onClick = functionOnClick;
+
+
+        this.restingColor = Button.default_restingColor;
+        this.hoverColor = Button.default_hoverColor;
+        this.depressedColor = Button.default_depressedColor;
+        this.cancelColor = Button.default_cancelColor;
+        this.borderColor = Button.default_borderColor;
+        this.borderThickness = Button.default_borderThickness;
+        this.cornerRadius = Button.default_cornerRadius;
+        this.currentColor = this.restingColor;
+
+        Object.defineProperty(this, "click", { value: this.click, writable: false });
+        /*the 'click' function is called by ClickableObject, and is used directly by the button class to update color and redraw
+         * it then invokes 'onClick' which is customizable for each button implementation
+         */
+    }
+
+    click(event) { this.updateCurrentColor(); this?.onClick(event); }
+
+    set onClick(func) {
+        if (func instanceof Function) this.oc = func;
+        else if (func === undefined) delete this.oc;
+        else throw new Error("onClick must be a function or set to undefined!");
+    }
+    get onClick() { return this.oc; }
+
+
+    get text() { return this.tx; }
+    set text(value) {
+        if (value instanceof DisplayText) this.tx = value;
+        else this.tx.string = value;
+        this.recenterFlag = true;
+    }
+    get objectToDraw() { return this.otd; }
+    set objectToDraw(value) {
+        if (!value) {
+            delete this.otd;
+            delete this.objectDrawCoord;
+            //this.text.vertAlignment = ALIGN_CENTER;
+        } else if (value.drawAt instanceof Function) {
+            this.otd = value;
+            this.objectDrawCoord = new Position();
+            //this.text.vertAlignment = ALIGN_TOP;
+        } else throw new Error("objectToDraw must have drawAt as a function!");
+        this.recenterFlag = true;
+    }
+
+    set x(value) { this.rectangle.x = value; this.recenterFlag = true; }
+    set y(value) { this.rectangle.y = value; this.recenterFlag = true; }
+    set width(value) { this.rectangle.width = value; this.recenterFlag = true; }
+    set height(value) { this.rectangle.height = value; this.recenterFlag = true; }
+    get x() { return this.rectangle.x; }
+    get y() { return this.rectangle.y; }
+    get width() { return this.rectangle.width; }
+    get height() { return this.rectangle.height; }
+
+    updateCurrentColor() { // finds the current color, and calls draw() if it changes
+        let newColor = this.restingColor;
+        if (this.pointerFlags.depressedAndOver) newColor = this.depressedColor;
+        else if (this.pointerFlags.cancelPossible) newColor = this.cancelColor;
+        else if (this.pointerFlags.hover) newColor = this.hoverColor;
+        if (this.currentColor != (this.currentColor = newColor)) this.draw();
+    }
+
+    draw(context = this.context) {
+        if (!this.visible) return;
+        context.clearRect(this.x, this.y, this.width, this.height);
+        context.lineWidth = this.borderThickness;
+        context.strokeStyle = this.borderColor.string;
+        context.fillStyle = this.currentColor.string;
+        if (this.cornerRadius <= 0 || !this.cornerRadius) { //draw a rectangle
+            context.strokeRect(this.x, this.y, this.width, this.height);
+            context.fillRect(this.x, this.y, this.width, this.height);
+        } else {
+
+            context.beginPath();
+            this.x += this.borderThickness / 2;
+            this.y += this.borderThickness / 2;
+            this.width -= this.borderThickness;
+            this.height -= this.borderThickness;
+
+            context.moveTo(this.x + this.cornerRadius, this.y); //starting point, upper left corner, moving clockwise
+            context.lineTo(this.x + this.width - this.cornerRadius, this.y); //upper edge
+            context.arc(this.x + this.width - this.cornerRadius, this.y + this.cornerRadius, this.cornerRadius, ANGLE.down.radians, ANGLE.right.radians) //upper-right corner
+            context.lineTo(this.x + this.width, this.y + this.height - this.cornerRadius); //right edge
+            context.arc(this.x + this.width - this.cornerRadius, this.y + this.height - this.cornerRadius, this.cornerRadius, ANGLE.right.radians, ANGLE.up.radians);
+            context.lineTo(this.x + this.cornerRadius, this.y + this.height); //bottom edge
+            context.arc(this.x + this.cornerRadius, this.y + this.height - this.cornerRadius, this.cornerRadius, ANGLE.up.radians, ANGLE.leftPos.radians);
+            context.lineTo(this.x, this.y + this.cornerRadius); // left edge
+            context.arc(this.x + this.cornerRadius, this.y + this.cornerRadius, this.cornerRadius, ANGLE.leftPos.radians, ANGLE.downPos.radians)
+
+            context.stroke();
+            context.fill();
+
+            this.x -= this.borderThickness / 2;
+            this.y -= this.borderThickness / 2;
+            this.width += this.borderThickness;
+            this.height += this.borderThickness;
+        }
+
+        if (this.objectToDraw) {
+            if (this.recenterFlag) {
+                if (this.text?.string) {
+                    this.text.alignOverCoordinate(this.x + this.width / 2, this.y + this.height / 2, context); // need the text height in this context to determine where to place the object vertically.  the position is just a throw-away for now.  actualy position set in a few lines
+                    this.objectDrawCoord.x = this.x + (this.width - this.objectToDraw.width) / 2;
+                    this.objectDrawCoord.y = this.y + (this.height - (this.objectToDraw.height + this.text.height)) / 2;
+                    this.text.alignOverCoordinate(this.x + this.width / 2, ((this.objectDrawCoord.y + this.objectToDraw.height) + (this.y + this.height)) / 2, context);
+                } else {
+                    this.objectDrawCoord.x = this.x + (this.width - this.objectToDraw.width) / 2;
+                    this.objectDrawCoord.y = this.y + (this.height - this.objectToDraw.height) / 2;
+                }
+            }
+            if (this.text?.string) this.text.draw(context);
+            this.objectToDraw.drawAt(this.objectDrawCoord.x, this.objectDrawCoord.y, context);
+
+        } else if (this.text?.string) {
+            if (this.recenterFlag) this.text.alignOverCoordinate(this.x + this.width / 2, this.y + this.height / 2, context);
+            this.text.draw(context);
+        }
+    }
+}
+
+Button.default_restingColor = LIGHT_PEACH;
+Button.default_hoverColor = PEACH;
+Button.default_depressedColor = LIGHT_ORANGE;
+Button.default_cancelColor = LIGHT_ROSE;
+Button.default_borderColor = BROWN;
+Button.default_borderThickness = 5;
+Button.default_cornerRadius = 30;
+
+
+class SelectionButton extends Button {
+    constructor(rectangle, text, objectToDraw, selectionGroup) {
+        super(rectangle, text, objectToDraw)
+        this.selectionGroup = selectionGroup;
+        this.selected = false;
+        this.visible = true;
+        this.onSelection = selectionGroup.selectionFunction;
+    }
+
+    onClick(event) {
+        let alreadySelected = this.selected;
+        this.selectionGroup.newSelection(this);
+        this.onSelection(event, this, alreadySelected);
+    }
+
+}
+
+class SelectionButtonGroup extends Container {
+    constructor(texts, objectsToDraw, selectionFunction = SelectionButtonGroup.prototype.selectionFunction, rectangle = new Rectangle(0, 0, UI.editor.canvas.width, UI.editor.canvas.height), buttonSize = new Dimension(150, 70)) {
+        super(rectangle);
+        if (!(selectionFunction instanceof Function)) throw new Error("invalid contrusctor argument for Selection Button Group");
+        this.selectionFunction = selectionFunction;
+
+        this.buttons = new Array();
+        this.buttonSize = buttonSize;
+        this.spacing = SelectionButtonGroup.defaultSpacing;
+        this.numScreenCols = Math.floor((this.width + SelectionButtonGroup.defaultSpacing) / (buttonSize.width + SelectionButtonGroup.defaultSpacing))
+        this.numScreenRows = Math.floor((this.height + SelectionButtonGroup.defaultSpacing) / (buttonSize.height + SelectionButtonGroup.defaultSpacing))
+        if (this.numScreenCols < 1 || this.numScreenRows < 1) throw new Error("insufficient space for button selection group");
+
+        if (!(texts instanceof Array)) {
+            texts = new Array(); //empty
+        }
+        if (!(objectsToDraw instanceof Array)) {
+            objectsToDraw = new Array(); //empty
+        }
+
+        let length = Math.max(texts.length, objectsToDraw.length);
+        for (let i = 0; i < length; i++) {
+            this.addNewSelection(texts[i], objectsToDraw[i])
+        }
+        this.objects = this.buttons;
+    }
+
+    addNewSelection(text, objectToDraw) {
+        let x = (this.buttons.length % this.numScreenCols) * (this.buttonSize.width + this.spacing) + this.x;
+        let y = Math.floor(this.buttons.length / this.numScreenCols) * (this.buttonSize.height + this.spacing) + this.y;
+
+        let newButton = new SelectionButton(new Rectangle(x, y, this.buttonSize.width, this.buttonSize.height), text, objectToDraw, this);
+        newButton.context = this.context;
+        this.buttons.push(newButton);
+        this.draw();
+        return newButton;
+    }
+
+    selectionFunction(event, button, alreadySelected) {
+        /*this is the default function taken by each button element, in the individual button's constructor,
+         *this function should be overriden at the constructor of SelectionButtonGroup, or in a subclass implementation
+         * also, individual buttons can have custom 'onSelection' functions assigned to them
+         */
+        console.log(this);
+        throw new Error("must assign a selection function for the SelectionButtonGroup!");
+    }
+
+    newSelection(selection) { //could write code here for custom multi-selection behaviors.  Currently it is single-selection
+        this.currentButton = selection;
+        this.buttons.forEach((button) => {
+            if (button === selection) {
+                button.selected = true;
+                button.borderThickness = Button.default_borderThickness * 2;
+                button.restingColor = Button.default_hoverColor;
+            } else {
+                button.selected = false;
+                button.borderThickness = Button.default_borderThickness;
+                button.restingColor = Button.default_restingColor;
+                button.updateCurrentColor();
+            }
+        });
+        this.draw();
+
+    }
+}
+
+SelectionButtonGroup.defaultSpacing = 5;
+
+let playtimeButtons = new Container(0, 0, UI.editor.width, UI.editor.height, [
+    new Button(new Rectangle(25, 25, 150, 75), "BOARD EDITOR", undefined, function () {
+        if (!this.editor) this.editor = new BoardEditor();
+        this.editor.startEditing();
+    }),
+    new Button(new Rectangle(25, 125, 150, 75), "RESTART GAME", undefined, () => {
+        if(Engine.intervalHandler) Engine.terminate(Engine.intervalHandler);
+        board = new Board(board.template);
+        UI.board.installNewTargetObject(board);
+        board.firstRound();
+    })
+]);
+
+UI.editor.installNewTargetObject(playtimeButtons);
+
+UI.editor.canvas.remove();
+
+let restartButton = document.getElementsByTagName("main")[0].appendChild(document.createElement("button"));
+restartButton.onclick = playtimeButtons.objects[1].onClick;
+restartButton.innerText = "Restart Game";
+
+/*
+ 
+//resetScatter(); //NOTE: TO USE SCATTER BUTTON, THIS LINE NEEDS TO BE MOVED BACK TO 'main.js', AFTER THE BOARD IS CONSTRUCTED
+ 
+let scatter = new Button("SCATTER BALLS", new Rectangle(25, 15, 150, 70), () => {
+    if (scatter.timer <= 0 || Number.isNaN(scatter.timer)) { //start countdown
+        scatter.timer = 3;
+        scatterCountdown();
+    } else { // cancel countdown
+        scatter.timer = Number.NaN;
+        scatter.text = "SCATTER BALLS";
+        scatter.draw();
+    }
+});
+
+(new UI(document.getElementById("button1"), scatter)).addDefaultListeners();
+
+
+function resetScatter() {
+
+    scatter.timer = 3;
+    scatter.onClick(); //causes SCATTER BALLS button to reset appearance
+
+    board.engine.addToQueue("afterTermination", resetScatter)
+};
+
+
+function scatterCountdown() {
+    if (scatter.timer <= 0) {
+        board.activeBalls.forEach((ball, index) => {
+            if (ball.x >= board.width) ball.x = 399;
+            if (ball.x <= board.x) ball.x = board.x + 1;
+            if (ball.y <= board.y) ball.y = board.y - 1;
+            ball.direction.degrees = (Math.random() + Math.random() + Math.random() + Math.random()) * 90 + 90;
+            ball.updateVectorDirection();
+            ball.collisionSurfaces.length = 0;
+            ball.intersectionsCache.findNextCollision();
+        })
+        scatter.text = "SCATTER BALLS";
+        scatter.draw();
+    } else if (Number.isNaN(scatter.timer)) {
+        scatter.timer = 0;
+    } else {
+        scatter.text = "COUNTDOWN: " + Math.round(scatter.timer * 10) / 10;
+        scatter.draw();
+        scatter.timer -= board.engine.frameSeconds;
+        board.engine.addToQueue("beforeDraw", scatterCountdown);
+    }
+}
+*/
+
+initializeLogger?.("ui ran");

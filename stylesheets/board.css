@@ -1,0 +1,210 @@
+html, body, main {
+    /*overflow: hidden; changed programatically, in UI.js*/
+    margin: 0;
+}
+
+body.useScreenWidth {
+    /*taken from css-tricks.com*/
+    display: -webkit-box; /* OLD - iOS 6-, Safari 3.1-6 */
+    display: -moz-box; /* OLD - Firefox 19- (buggy but mostly works) */
+    display: -ms-flexbox; /* TWEENER - IE 10 */
+    display: -webkit-flex; /* NEW - Chrome */
+    display: inline-flex;
+}
+
+*:not(pre, code) {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    outline: none;
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0); /* mobile webkit */
+    padding: 0;
+    margin: 0;
+}
+
+canvas.board {
+    background: url("../backgrounds/default.jpg");
+    /* https: //i.pinimg.com/originals/a9/2a/17/a92a179cf4e0fd444cfa8d7ec565a8d2.jpg */
+}
+
+.noPadding {
+    padding: 0;
+    margin: 0;
+}
+
+.defaultPadding {
+    padding: initial;
+    margin: initial;
+}
+
+canvas {
+    display: inline-block;
+    /*float: left;*/
+    border: 5px solid #A52A2A;
+    margin: 0;
+}
+
+canvas.fillWidth {
+    width: calc(100% - 10px);
+}
+
+canvas.fillHeight {
+    height: calc(100% - 10px);
+}
+
+canvas.fillHeightWithButtonsBelow {
+    height: calc(100% - 80px - 1rem);
+}
+
+div {
+    /*float: left;*/
+    display: inline-block;
+}
+
+/*BUTTONS*/
+
+div.editor button,
+div.modal a,
+div.boardViewer a {
+    /*float: left;*/
+    padding: 15px;
+    border-radius: 20px;
+    background-color: rgb(255, 229, 204);
+    border: 4px solid #663300;
+    font-family: sans-serif;
+    font-size: 1rem;
+    line-height: 1;
+    vertical-align: top;
+    margin: 8px;
+}
+
+div.editor button {
+    display: inline;
+}
+
+div.modal a,
+div.boardViewer a {
+    display: block;
+    text-decoration: none;
+    font-weight: bold;
+    -webkit-user-drag: none;
+    -webkit-app-region: none;
+}
+
+
+div.editor button:hover,
+div.editor button.selected,
+div.modal a:hover,
+div.boardViewer a:hover {
+    background-color: rgb(255, 204, 153);
+}
+
+div.editor button:active:not(:hover),
+div.modal       a:active:not(:hover),
+div.boardViewer a:active:not(:hover) {
+    background-color: rgb(255, 204, 204);
+}
+
+div.editor button:active:hover,
+div.editor button.selected:hover,
+div.modal  a:active:hover,
+div.boardViewer a:active:hover {
+    background-color: rgb(255, 178, 102);
+}
+
+div.editor button > canvas {
+    float: none;
+    display: block;
+    border: none;
+    padding: 0 5px;
+    margin: 5px auto;
+}
+
+div.editor button.selected {
+    margin: 7px;
+    padding: 14px;
+    border: 6px solid #A52A2A;
+}
+
+div.editor div {
+    border: 6px solid #A52A2A;
+    border-radius: 15px;
+    margin: 6px;
+}
+
+div.editor > div > button.selected,
+div.editor > div > div {
+    border: 6px solid #0000FF;
+}
+
+div.editor > div > div {
+/*not sure whether to keep this or not*/
+    display: -webkit-box;
+    display: table;
+    display: flow-root;
+}
+
+div.editor > div > div > button.selected,
+div.editor > div > div > div {
+    border: 6px solid #0D6E27;
+}
+
+
+/* BOARD VIEWER */
+
+div.boardViewer {
+    margin: 1.5em;
+    padding: 1em;
+    background-color: #f1e7da;
+}
+
+div.boardViewer > h2 {
+    text-align: center;
+    font-family: sans-serif;
+}
+
+div.boardViewer > canvas.board {
+    cursor: pointer;
+}
+
+div.boardViewer > a {
+    display: flex;
+}
+
+/* MODALS */
+
+div.modal {
+    position: fixed;
+    margin: auto;
+    padding: 5em;
+    background-color: #f1e7da;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+div.modal > h2 {
+    font-family: sans-serif;
+    color: black;
+    padding: 2em;
+    text-align: center;
+}
+
+div.modal > button.xOut {
+    float: right;
+    padding: 0.5em;
+    margin: -2em;
+}
+
+body.underModal {
+    overflow: hidden;
+    background-color: grey;
+}
+
+body.underModal *:not(div.modal) * {
+    opacity: 0.5;
+    cursor: auto;
+}

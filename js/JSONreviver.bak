@@ -1,0 +1,518 @@
+'use strict';
+
+class JSONobject {
+    //wrapper class for objects being stringify'd, to allow for dynamic construction during revival
+    //and to prevent re-construction of the same object multiple times with an object indexing system (see JSONfilter and JSONrevive classes)
+    static getJSONobject() { //this function is assigned to Object.toJSON, so all objects use it with that object as 'this'
+        if (this instanceof JSONobject) throw new Error("recursion");
+        if (this.constructorArgs instanceof Function) {
+            if (this.constructorArgs() instanceof Array) return new JSONobject(this, true);
+            else {
+                console.log("ERROR: invalid return from constructorArgs()");
+                throw new Error("invalid constructor args");
+            }
+        }
+        else return new JSONobject(this, false);
+    }
+
+    constructor(referentialObject, constructorArgs) {
+        this.__class = referentialObject.__proto__.constructor.name;
+        if(constructorArgs) this.__constructorArgs = referentialObject.constructorArgs();
+        this.__refersTo = referentialObject;
+    }
+
+    static primitiveProperties = Object.freeze(["__class", "__constId", "__constGroup", "__constName", "__objectIndex"]);
+    //JSONoject properties which contain primitive values, for the filter second pass method.  These are typically added by the filter
+}
+
+Object.defineProperty(JSONobject, "primitiveProperties", { writeable: false, configurable: false });
+
+Object.defineProperty(Object.prototype, 'toJSON', { value: JSONobject.getJSONobject, enumerable: false, writeable: false });
+
+class JSONfilter {
+    static stringify(object, useOptionalEnumeration = false, forceEnumeration = false) {
+        let filter = new JSONfilter();
+        let s = JSON.stringify(object, filter.filterFirstPass);
+        filter.refineObjectsList();
+        let string = JSON.stringify(object, filter.filterSecondPass);
+        filter.endTime = Date.now();
+        return { filter: filter, string: string };
+    }
+
+    constructor(useOptionalEnumeration, forceEnumeration) {
+        this.startTime = Date.now();
+        this.objects = new Array();
+        this.referenceCounters = new Array();
+        this.filterFirstPass = this.filterFirstPass.bind(this);
+        this.filterSecondPass = this.filterSecondPass.bind(this);
+
+        if (this.useOptionalEnumeration = useOptionalEnumeration) this.optionalEnumerations = new Array();
+        this.forceEnumeration = forceEnumeration;
+        this.defaultEnumerations = new Array(); //done regardless for (functionally) anonymous objects
+        this.enumerationHierarchy = new Array(); //tracks the object currently being enumerated over (last index in the array)
+    }
+
+    get calcTime() { return this.endTime - this.startTime; }
+
+    filterFirstPass(key, value) {
+        if (key === "__constructorArgs") {
+            value.__objectIndex = -1;
+            return value;
+        }
+
+        if (key === "__objectIndex" && this.referenceCounters[value] === 1) { //just came out of enumerating the object's properties
+            let removedEnumeration = this.enumerationHierarchy.pop();
+            if (this.objects.indexOf(removedEnumeration.object) !== value)
+                throw new Error("unexpected behavior in __objectIndex and enumerationHierarchy");
+            return value;
+        }
+
+        if (JSONobject.primitiveProperties.includes(key)) return value;
+
+        if (key === "__refersTo") {
+            if (value instanceof JSONobject) { //recursive
+                let index = this.objects.indexOf(value.__refersTo);
+
+                if (this.referenceCounters[index] > 1) throw new Error("objects should only be stringify'd once!");
+
+                this.enumerationHierarchy.push(this.defaultEnumerations[index]);
+                return value.__refersTo;
+
+            } else if (value instanceof Object) {
+                // ?? this should be dead code ?? test it out?
+                let index = this.objects.indexOf(value);
+                if (index === -1) throw new Error("__refersTo objects should have already been logged in objects array");
+                return value;
+            }
+        }
+
+        if (value instanceof JSONobject) {
+            if (!(value.__refersTo instanceof Object)) throw new Error("__refersTo property removed prematurely or improperly used for a non-object!");
+
+            let index = this.objects.indexOf(value.__refersTo);
+            if (index === -1) {
+                index = this.objects.push(value.__refersTo) - 1;
+                value.__objectIndex = index;
+
+                this.referenceCounters.push(1);
+
+                if (value.__constructorArgs instanceof Array && !this.forceEnumeration) {
+                    delete value.__refersTo;
+
+                } else { //functionally anonymous object and/or forced enumeration
+                    this.defaultEnumerations[index] = {
+                        keyTracker: {},
+                        object: value.__refersTo
+                    };
+
+                }
+
+            } else {
+                delete value.__constructorArgs;
+                delete value.__refersTo;
+                value.__objectIndex = index;
+                this.referenceCounters[index]++;
+            }
+
+        } else if (value instanceof Object) throw new Error("only JSONobjects, arrays, and primitives should be outside of the __refersTo field when stringifying!!");
+
+        if (this.enumerationHierarchy.length > 0)
+            this.enumerationHierarchy[this.enumerationHierarchy.length - 1].keyTracker[key] = false;
+
+        return value;
+    }
+
+    refineObjectsList() {
+        // identifies any objects which are constants
+        // culls objects which are only used once from the main objects array.  They are still kept in the unindexed array for safety comparison by filterSecondPass
+
+        this.unindexedObjects = new Array();
+        this.unindexedObjects.nextDefaultEnumerations = new Array();
+
+        this.defaultEnumerations = {
+            objects: this.defaultEnumerations,
+            unindexedObjects: new Array(),
+            constants: new Array()
+        }
+
+        this.constants = {
+            object: new Array(),
+            name: new Array(),
+            group: new Array(),
+            constructed: new Array()
+        }
+
+        for (let i = 0; i < this.objects.length; i++) {
+            let isConstant = false;
+            for (let group in CONSTANTS) {
+                for (let name in CONSTANTS[group]) {
+                    if (CONSTANTS[group][name] === this.objects[i]) {
+                        if (isConstant) throw new Error("unexpected behavior in constants checking loop");
+                        isConstant = true;
+
+                        this.referenceCounters.splice(i, 1);
+                        this.constants.object.push(this.objects.splice(i, 1)[0]);
+                        this.defaultEnumerations.constants.push(this.defaultEnumerations.objects.splice(i, 1)[0]);
+
+                        this.constants.name.push(name);
+                        this.constants.group.push(group);
+                        this.constants.constructed.push(false);
+
+                        i--;
+                        break;
+                    }
+                }
+                if (isConstant) break;
+            }
+            if (isConstant || this.referenceCounters[i] > 1) continue; //constant or indexed object
+
+            //unindexed object
+            this.referenceCounters.splice(i, 1);
+            this.unindexedObjects.push(this.objects.splice(i, 1)[0]);
+            this.defaultEnumerations.unindexedObjects.push(this.defaultEnumerations.objects.splice(i, 1)[0]);
+            i--;
+        }
+        this.referenceCounters.fill(false);
+    }
+
+    filterSecondPass(key, value) {
+        if (key === "__constructorArgs") {
+            this.enumerationHierarchy.push(JSONfilter.makeArrayTracker(value.__refersTo));
+            return value.__refersTo;
+        }
+        if (key === "__enumerate") {
+            this.enumerationHierarchy.push(value.__refersTo);
+            return value.__refersTo.object;
+        }
+
+        if (JSONobject.primitiveProperties.includes(key)) return value;
+
+        if (key === "__refersTo") {
+            if (value instanceof JSONobject) { //recursive
+                let constant = true;
+                let index = this.constants.object.indexOf(value.__refersTo);
+                if (index === -1) {
+                    constant = false;
+                    index = this.objects.indexOf(value.__refersTo);
+                }
+
+                if (index === -1) {
+                    if (value.__refersTo !== this.unindexObjects.next) throw new Error("unexpected result in filterSecondPass!");
+                    delete this.unindexedObjects.next;
+                    let enumerations = this.unindexedObjects.nextDefaultEnumerations.splice(-1, 1)[0];
+                    if (enumerations && enumerations.object !== value.__refersTo) throw new Error();
+
+                    this.enumerationHierarchy.push();
+
+                } else {
+                    if (value.__refersTo === this.constants.next && constant) {
+                        delete this.constants.next;
+                        if (this.constants.constructed[index] === (this.constants.constructed[index] = true)) throw new Error("objects should only be stringify'd once!");
+
+                    } else if (value.__refersTo === this.referenceCounters.next && !constant) {
+                        delete this.referenceCounters.next;
+                        if (this.referenceCounters[index] === (this.referenceCounters[index] = true)) throw new Error("objects should only be stringify'd once!");
+
+                        this.enumerationHierarchy.push(this.defaultEnumerations[index]);
+
+                    } else throw new Error("unexpected result in filterSecondPass!");
+                }
+
+                this.next = value.__refersTo;
+                return value.__refersTo;
+
+            } else if (value instanceof Object) {
+                if (value != this.next) throw new Error("unexpected result in filterSecondPass!");
+                delete this.next;
+
+                return value;
+
+            }
+        }
+
+        if (value instanceof JSONobject) {
+            if (!value.__refersTo) throw new Error("__refersTo property removed prematurely!");
+
+            let constant = true;
+            let index = this.constants.object.indexOf(value.__refersTo);
+            if (index === -1) {
+                constant = false;
+                index = this.objects.indexOf(value.__refersTo);
+            }
+
+            if (index === -1) { //this object is only used once.  check the unindexed array
+                index = this.unindexedObjects.indexOf(value.__refersTo);
+                if (index === -1) throw new Error("unexpected object!");
+
+                let hasOptionalEnumerations = this.initiateOptionalEnumerations(value, index, "unindexedObjects");
+                let defaultEnumerations = this.defaultEnumerations.unindexedObjects.splice(index, 1)[0];
+                
+
+                if ((value.__refersTo instanceof Array || !value.__constructorArgs) && !hasOptionalEnumerations) {
+                    //arrays and (functionally) anonymous objects that are only used once and have no enumerations, are stringify'd as literals without a JSONobject wrapper
+                    this.next = this.unindexedObjects.splice(index, 1)[0];
+                    value = this.checkKeyTracker(key, value);
+                    if(value !== undefined) this.enumerationHierarchy.push(defaultEnumerations);
+
+                    return value?.__refersTo;
+
+                } else if (value.__constructorArgs instanceof Array) {
+                    //for dynamic construction, not a (functionally) anonymous object or array, requires a JSONobject wrapper
+                    this.unindexedObjects.next = this.unindexedObjects.splice(index, 1)[0];
+
+                    if (!this.forceEnumeration) delete value.__refersTo;
+                    else this.unindexedObjects.nextDefaultEnumerations.push(defaultEnumerations);
+                    return this.checkKeyTracker(key, value);
+
+                } else if (hasOptionalEnumerations) {
+                    //no constructor args so keep __referTo, but has non-default enumerations also, so needs JSONobject wrapper
+                    this.unindexedObjects.next = this.unindexedObjects.splice(index, 1)[0];
+                    this.unindexedObjects.nextDefaultEnumerations.push(defaultEnumerations);
+                    return this.checkKeyTracker(key, value);
+
+                } else throw new Error("invalid JSONobject properties!");
+
+            } else if (constant ? this.constants.constructed[index] : this.referenceCounters[index]) { //means the object construction has already been stringify'd
+                delete value.__constructorArgs;
+                delete value.__refersTo;
+                delete value.__class;
+                if (constant) value.__constId = index;
+                else value.__objectIndex = index;
+                return this.keyChecker(key, value);
+
+            } else { //means object construction needs to be stringify'd
+                if (constant) {
+                    value.__constId = index;
+                    value.__constName = this.constants.name[index];
+                    value.__constGroup = this.constants.group[index];
+                    this.constants.next = this.constants.object[index];
+
+                } else {
+                    value.__objectIndex = index;
+                    this.referenceCounters.next = value.__refersTo;
+
+                }
+
+                initiateEnumerations(value, index, category);
+
+                if (value.__constructorArgs instanceof Array) {
+                    if (!this.forceEnumeration) delete value.__refersTo
+                    if (constant) this.constants.constructed[index] = true;
+                    else this.referenceCounters[index] = true;
+
+                }
+
+                value = this.checkKeyTracker(key, value);
+                if (value === undefined) throw new Error();
+                return value;
+            }
+            throw new Error("program flow error!");
+        }
+
+        return this.checkKeyTracker(key, value);
+    }
+
+    initiateOptionalEnumerations(value, index, category) {
+        let subKeys = [];
+        if (value.__refersTo.mustEnumerate instanceof Function) {
+            subKeys.push(...value.__refersTo.mustEnumerate());
+        }
+        if (this.useOptionalEnumeration && (value.__refersTo.enumerate instanceof Function)) {
+            subKeys.push(...value.__refersTo.enumerate());
+        }
+
+        if (subKeys.length > 0) {
+            let defaultEnumerations = this.defaultEnumerations[category][index];
+            let enumerationsObject = {};
+            let keyTracker = {};
+            let hasKeys = false;
+            for (let sk of subKeys) {
+                if (defaultEnumerations[sk] !== undefined) continue; //skip enumerations already done by the default/forced
+                hasKeys = true;
+                enumerationsObject[sk] = value.__refersTo[sk]
+                keyTracker[sk] = false;
+
+            }
+
+            value.__enumerate = {
+                tracker: keyTracker,
+                object: enumerationsObject
+            };
+
+            return hasKeys;
+
+        } else return false;
+    }
+
+    checkKeyTracker(key, value) {
+        if (this.enumerationHierarchy.length <= 0) {
+            if (this.rootObjectTraversed) throw new Error();
+            this.rootObjectTraversed = true;
+            return value;
+        }
+
+        let keyTracker = this.enumerationHierarchy[this.enumerationHierarchy.length - 1];
+        let object = keyTracker.object;
+        keyTracker = keyTracker.keyTracker;
+
+        let valueToCompare = value;
+        if (value instanceof JSONobject) {
+            if (value.__refersTo === undefined) {
+                if (isFinite(value.__objectIndex)) valueToCompare = this.objects[value.__objectIndex];
+                else if (isFinite(value.__constId)) valueToCompare = this.constants.objects[value.__objectIndex];
+                else throw new Error();
+
+            } else valueToCompare = value.__refersTo
+        }
+
+        if (object[key] !== valueToCompare) {
+            console.log(key);
+            console.log(value);
+            console.log(this.enumerationHierarchy[this.enumerationHierarchy.length - 1]);
+            console.log(this);
+            throw new Error("Key tracker object is not matching up!");
+        }
+
+        if (keyTracker[key] !== false) {
+            console.log(key);
+            console.log(value);
+            console.log(this.enumerationHierarchy[this.enumerationHierarchy.length - 1]);
+            console.log(this);
+            throw new Error("Key tracker object properties are not matching up with properties being enumerated by JSON.stringify");
+        }
+
+        delete keyTracker[key];
+        if (JSONfilter.doneEnumerating(keyTracker)) this.enumerationHierarchy.pop();
+
+        return value;
+    }
+
+    static makeArrayTracker(array) {
+        // for constructorArgs only ... will NOT make key tracking for other enumerable properties, only numerical indexes!!!
+        // if constructorArgs array has enumerable key - value pairs, it will throw an error in above second pass function!!
+        return {
+            tracker: (new Array(array.length)).fill(false),
+            object: array
+        };
+    }
+
+    static doneEnumerating(keyTracker) {
+        for (let key in keyTracker) {
+            return false;
+        }
+        return true;
+    }
+}
+
+class JSONreviver {
+    static verifyConstants = true;
+
+    static parse(string) {
+        let reviver = new JSONreviver();
+        let result = JSON.parse(string, reviver.revive);
+        reviver.endTime = Date.now();
+        return { reviver: reviver, result: result };
+    }
+
+    static classes = [
+        Position,
+        Point,
+        Surface,
+        SimpleRectangleBlock,
+        ShapedBlock,
+        RightTriangleBlock,
+        DirectionalBlock,
+        SolidDirectionalBlock,
+        BombBlock,
+        Angle,
+        AngleRange,
+        CompoundAngleRange,
+        BoardTemplate,
+    ];
+
+    static fillClassNames() {
+        let classes = JSONreviver.classes;
+        JSONreviver.classes = { }
+        classes.forEach((cls, index) => {
+            JSONreviver.classes[cls.name] = cls;
+        });
+    }
+
+    constructor(verifyConstantsOverride) {
+        this.startTime = Date.now();
+        this.verifyConstants = verifyConstantsOverride;
+        this.objects = new Array();
+        this.constants = new Array();
+        this.revive = this.revive.bind(this);
+    }
+
+    get calcTime() { return this.endTime - this.startTime; }
+
+    revive(key, value) {
+        if (value instanceof Object) {
+            if (value.__class && (value.__refersTo || value.__constructorArgs)) { //appears to be a JSONobject wrapper with something to construct
+                if (this.objects[value.__objectIndex] || this.constants[value.__constId]) throw new Error("object from this objectIndex or constId was already constructed!");
+
+                let object;
+                let constant;
+
+                if (value.__constGroup && value.__constName) {
+                    constant = true;
+                    object = CONSTANTS[value.__constGroup][value.__constName];
+                    this.constants[value.__constId] = object;
+                    if (    (this.verifyConstants ?? JSONreviver.verifyConstants)
+                        &&  value.__class !== object.__proto__.constructor.name
+                        &&  !JSONreviver.verifyConstant(value.__constructorArgs ?? value.__refersTo, object.constructorArgs?.() ?? object)
+                      ) {
+                        throw new Error("constant verification failed!");
+                    }
+
+                } else if (value.__constructorArgs instanceof Array) { //wraps a dynamically constructable class
+                    if (!JSONreviver.classes[value.__class]) throw new Error(value.__class + " class could not be found in the JSONreviver classes array");
+                    constant = false;
+                    object = new (JSONreviver.classes[value.__class])(...value.__constructorArgs);
+
+                } else if (value.__refersTo instanceof Object) { //wraps a array, anonymous class, or functionally anonymous class
+                    constant = false;
+                    object = value.__refersTo;
+
+                } else throw new Error("What appears to be a JSONobject did not have a property that could be converted into an object");
+
+                if (!constant && value.__objectIndex > -1) this.objects[value.__objectIndex] = object;
+
+                return object;
+
+            } else if (value.__constId > -1) { //wrapping an already-ID'd (and verified if required) constant
+                return this.constants[value.__constId];
+
+            } else if (value.__objectIndex > -1) { //wrapping an already-constructed object
+                return this.objects[value.__objectIndex];
+
+            } else return value; //is not a JSONobject wrapper
+        } else return value; //is a primitive
+    }
+
+    static verifyConstant(value, constant) { //recursive function for verifying every property or  of a constant object
+        if (!(value instanceof Object && constant instanceof Object)) { //has reached the primitive level
+            return value === constant;
+        }
+        for (let property in value) {
+            if (!JSONreviver.verifyConstant(value[property], constant[property])) return false;
+        }
+        for (let property in constant) {
+            if (!JSONreviver.verifyConstant(constant[property], value[property])) return false;
+        }
+        return true;
+    }
+}
+
+JSONreviver.fillClassNames();
+
+const CONSTANTS = {
+    ANGLE: ANGLE,
+    ANGLE_RANGE_360: ANGLE_RANGE_360,
+    ANGLE_RANGE_180: ANGLE_RANGE_180,
+    BLOCK_COLOR_SCHEME: BLOCK_COLOR_SCHEME,
+}
+
+//console.log("ran\t\t\t\t\tJSONreviver.js " + (Date.now() - initializeStartTime) + " ms");

@@ -1,0 +1,208 @@
+fieldset {
+    /* display: initial; ???*/
+    text-align: left;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 3em;
+    background-color: rgb(235, 245, 255);
+}
+
+header {
+    display: flex;
+}
+
+header h2, header h3 {
+    padding: 0.5em;
+    margin: 0;
+}
+
+header > nav {
+    display: inline-block;
+}
+
+header > nav > a {
+    padding: 1em;
+    background-color: darkblue;
+    color: #DDD;
+    margin: 1.25em;
+    text-decoration: none;
+    float: left;
+}
+
+header span#loggedInNotification {
+    padding: 1em;
+    margin: 1.25em;
+    display: inline-block;
+    background-color: aqua;
+    text-decoration: none;
+    float: right;
+}
+
+header span#loggedInNotification > span.displayname{
+    font-weight: bold;
+}
+
+header span#loggedInNotification > span.username {
+    font-style: italic;
+}
+
+header span#loggedInNotification > span:not(:first-child)::before {
+    content: "\A";
+    white-space: pre;
+}
+
+form {
+    /*display: table-caption;*/
+
+}
+
+form > div {
+    /*display: inline-block;*/
+    margin: 0.75em;
+}
+
+input, select, textarea {
+    padding: 0.25em;
+    margin: 0.25em;
+}
+
+label {
+    display: block;
+}
+
+input[type="submit"] {
+    padding: 2em;
+    margin: 2em;
+}
+
+input[type="reset"] {
+    padding: 1em;
+    margin: 2em;
+}
+
+form span.fieldValidationError, form span.formValidationError, .error {
+    display: inline-block;
+    border: 1px solid red;
+    color: darkred;
+    background-color: pink;
+    padding: 0.5em;
+}
+
+form span.formValidationError {
+    font-weight: bold;
+    font-size: 1.5em;
+}
+
+form textarea {
+    width: 40em;
+    height: 10em;
+}
+
+main {
+    background-color: steelblue;
+}
+
+main > h1 { /* redirect links */
+    display: inline-block;
+}
+
+main > div.post, main > table, main > h1 {
+    margin: 2em auto;
+    padding: 2em;
+    border: #444444 solid 3px;
+    background-color: #f8f8f8;
+    box-shadow: 1em 1em 0.5em blueviolet;
+    border-radius: 1em;
+    max-width: 50em;
+}
+
+div.post > a > h1 { /*preview hyperlink to the entire post*/
+    background-color: #eaeaea;
+}
+
+div.post > a.edit-post {
+    display: inline-block;
+    border: 1px solid black;
+    text-decoration: none;
+    background-color: #DDD;
+    padding: 1em;
+    margin: 0 1em 1em;
+}
+
+.topNote {
+    display: inline-block;
+    border: solid lightgray 1px;
+    padding: 1em;
+    margin: 0 1em 1em;
+    font-family: sans-serif;
+    font-weight: bold;
+}
+
+div.post > h1, div.comment > h2 {
+    margin-top: 0;
+}
+
+div.post > h3.postUser {
+    margin-bottom: 0.25em;
+}
+
+div.post > h3.postDate {
+    margin-top: 0.25em;
+}
+
+div.postBody.preview {
+    max-height: 10em;
+    text-overflow: ellipsis;
+    overflow: auto;
+    border-bottom: 1px solid black;
+}
+
+div.comment {
+    margin: 1em auto;
+    padding: 2em;
+    border: #444444 solid 1px;
+    background-color: #f8f8f8;
+    box-shadow: 0.5em 0.5em 0.3em blueviolet;
+    border-radius: 1em;
+    max-width: 45em;
+}
+
+div.comment > div.commentBody {
+    margin-bottom: 1em;
+}
+
+div.comment > div.commentDate, div.comment > div.commentUser  {
+    text-align: right;
+}
+
+div.post > div.commentCount {
+    margin: 1em 1em 0;
+    color: blueviolet;
+}
+
+main > table {
+
+}
+
+main > table > tbody > tr > td:first-child {
+    font-weight: bold;
+    text-align: right;
+    padding: 1em;
+}
+
+main > table > tbody > tr > td:nth-child(2) {
+    font-family: sans-serif;
+}
+
+
+/* quill editor */
+.editor-container {
+    background-color: white;
+}
+
+.toolbar-container {
+    background-color: lightgray;
+}
+
+
+

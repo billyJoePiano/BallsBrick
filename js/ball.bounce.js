@@ -1,0 +1,704 @@
+"use strict"; document.currentScript.initTime = performance.now();
+
+Ball.prototype.bounce = function (invokeBounceOnBlocks = true) {  //set invokeBounceOnBlocks to false when calling from engine.predict function
+    if (invokeBounceOnBlocks) frameBounceCounter++;
+
+    //this function does not check if intersections are actually on the vector or surface,
+    for (let i = 0; i < this.collisionSurfaces.length; i++) { //verify that all surfaces are still intact
+        if (this.collisionSurfaces[i].destroyed)
+            this.collisionSurfaces.splice(i--, 1);
+    }
+
+    if (this.collisionSurfaces.length === 0) return false;
+
+    this.bounceLog.current = {
+        includesNonDribble: false,
+        includesDribble: false,
+        incomingAngle_orig: this.direction.degrees,
+        incomingAngle_effective: this.direction.degrees = this.vector.toDegrees(),
+        collisionSurfaces: [...this.collisionSurfaces],
+        cornerAdjustments: new Array(),
+        vector: this.vector.toString(),
+        //velocity: this.velocity.toString()
+    };
+
+    if (this.collisionSurfaces.length > 1) return this.startComplexBounce(invokeBounceOnBlocks);
+    else if (this.collisionSurfaces.length === 1) { //simplest scenario, most common: only 1 surface
+        let bounceAngle = this.collisionSurfaces[0].bounceAngle(this);
+        if (bounceAngle.incomingAngle) return false;
+        this.direction.degrees = this.disruptLoops(bounceAngle, this.collisionSurfaces[0].bounceRange);
+
+        if (this.disruptDribbleBounces(this.collisionSurfaces[0]) && invokeBounceOnBlocks) {
+            this.collisionSurfaces[0].block?.bounce(this, this.collisionSurfaces);
+        }
+
+        this.bounceLog.current.bounceAngle = this.direction.degrees;
+        return true;
+    } else throw new Error("");
+}
+
+Ball.prototype.bounce.logLength = 128;
+
+Ball.prototype.disruptLoops = function (bounceAngle, bounceRange) {
+    while (this.disruptLoopsVars.next?.timing >= this.fireTiming + this.remainingFrameSeconds) { this.disruptLoopsVars = this.disruptLoopsVars.next; }
+    let vars = this.disruptLoopsVars;
+
+    let multiplier = 0
+    let dist;
+    let ang;
+
+    for (let i = 1; i < this.bounceLog.positions.length; i++) { // skip the last bounce
+        if (
+            (dist = this.bounceLog.positions[i].distanceTo(this.currentPosition)) < vars.distanceMargin &&
+            (ang = Angle.acuteDistance(this.bounceLog.incomingAngles[i], this.direction.degrees)) < vars.angleMargin
+        ) {
+            multiplier += (vars.angleMargin - ang) / vars.angleMargin * (vars.distanceMargin - dist) / vars.distanceMargin * (this.bounce.logLength - i + 1) / Ball.disruptLoopsVars.indexWeightingDivisor;
+        }
+        if (!(multiplier >= 0)) throw new Error();
+    }
+
+
+
+    let disruptBounceAngleBy = multiplier * vars.disruptBounceAnglesBy;
+
+    bounceAngle = ANGLE_RANGE_360.positive.transform(bounceAngle);
+    //positive range needed for below formula with 'angleSwitchInterval', so it can create a single switch interval up to 360 degrees (otherwise 0 would be a switch point for negative angles)
+
+    if (Math.floor(bounceAngle / vars.angleSwitchInterval) % 2 !== 0) disruptBounceAngleBy *= -1;
+    //Assuming default of 11.25 switchAngle, repetative bounces along horizontal/vertical axes, and 45 degrees or 22.5/67.5/etc degree angles will gradually diverge from their bounce angles
+    //HOWEVER, it will cause repetative bounces along 11.25 / 33.75 / 56.25 / 78.75 / etc to CONVERGE along their bounce angles, neccessitating intervention from the engine invoking disruptLoops_incrementVariables
+
+    while (disruptBounceAngleBy !== 0) {
+        if (bounceRange.inRange(bounceAngle + disruptBounceAngleBy, false, false, false)) {
+            ////console.log(" multiplier: " + multiplier.toFixed(4) + "\t  disruptBounceAngleBy: " + disruptBounceAngleBy.toFixed(4) + "\t  bounceAngle: " + bounceAngle.toFixed(3) + "\t -->\t " + (bounceAngle + disruptBounceAngleBy).toFixed(3) + "  \t BALL ID: " + this.id);
+            bounceAngle += disruptBounceAngleBy;
+            break;
+        } else if (bounceRange.inRange(bounceAngle - disruptBounceAngleBy, false, false, false)) {
+            ////console.log(" multiplier: " + multiplier.toFixed(4) + "\t  disruptBounceAngleBy: " + disruptBounceAngleBy.toFixed(4) + "\t  bounceAngle: " + bounceAngle.toFixed(3) + "\t -->\t " + (bounceAngle - disruptBounceAngleBy).toFixed(3) + "  \t BALL ID: " + this.id);
+            bounceAngle -= disruptBounceAngleBy;
+            break;
+        } else disruptBounceAngleBy /= 2;
+    }
+
+    if (this.bounceLog.positions.length >= this.bounce.logLength) {
+        this.bounceLog.positions.unshift(this.bounceLog.positions.pop().updateFromPosition(this.currentPosition));
+        this.bounceLog.incomingAngles.unshift(this.direction.degrees);
+        this.bounceLog.incomingAngles.length = this.bounce.logLength;
+        this.bounceLog.details.pop();
+        this.bounceLog.details.unshift(this.bounceLog.current);
+    } else {
+        this.bounceLog.positions.unshift(new Position(this.currentPosition.x, this.currentPosition.y));
+        this.bounceLog.incomingAngles.unshift(this.direction.degrees);
+        this.bounceLog.details.unshift(this.bounceLog.current);
+    }
+    this.bounceLog.current.position = this.bounceLog.positions[0];
+
+    return bounceAngle;
+
+}
+
+function disruptLoops_resetVariables() { // Ball = Ball.prototype.disruptLoops
+    Ball.disruptLoopsVars = {
+        counter: 0,
+        indexWeightingDivisor: 0.25 * Ball.prototype.bounce.logLength ** 2 + 0.5 * Ball.prototype.bounce.logLength / 2,
+        // ^^^ ensures that multiplier will never exceed 2.  If every other bounce in the log is the exact same angle and position as the current bounce, then multiplier will equal 2
+        //     in practice, the multiplier is usually less than 0.1, and rarely exceeds 0.2
+
+        disruptBounceAnglesBy: 1,
+        angleSwitchInterval: 360 / 32, // = 11.25 
+        angleMargin: 360 / 128, // = 2.8125
+        distanceMargin: Block.standardSize / 4,
+
+        maxFireTiming: 0,
+        vars: new Array()
+    }
+
+    Ball.disruptLoopsVars.vars.unshift({
+        disruptBounceAnglesBy: Ball.disruptLoopsVars.disruptBounceAnglesBy,
+        angleSwitchInterval: Ball.disruptLoopsVars.angleSwitchInterval,
+        angleMargin: Ball.disruptLoopsVars.angleMargin,
+        distanceMargin: Ball.disruptLoopsVars.distanceMargin,
+    });
+
+
+}
+
+function disruptLoops_incrementTiming(seconds) {
+    Ball.disruptLoopsVars.vars.forEach((vars) => {
+        if (Number.isFinite(vars.timing)) vars.timing += seconds;
+        else vars.timing = 0;
+    });
+    while (Ball.disruptLoopsVars.vars.length > 1 &&
+        Ball.disruptLoopsVars.vars[Ball.disruptLoopsVars.vars.length - 2].timing > Ball.disruptLoopsVars.maxFireTiming + seconds)
+    { Ball.disruptLoopsVars.vars.pop(); } //get rid of vars instances that are no longer needed
+}
+
+function disruptLoops_incrementVariables() { // Ball = Ball.prototype.disruptLoops
+    if (++Ball.disruptLoopsVars.counter >= 64) {
+        Ball.disruptLoopsVars.counter = 0;
+        Ball.disruptLoopsVars.distanceMargin += Block.standardSize / 4
+
+    } else if (Ball.disruptLoopsVars.counter % 32 === 0)
+        Ball.disruptLoopsVars.angleMargin += 1.40625;
+
+    if (Ball.disruptLoopsVars.counter % 8 === 0) {
+        Ball.disruptLoopsVars.angleSwitchInterval *= 2;
+        if (Ball.disruptLoopsVars.angleSwitchInterval > 360)
+            Ball.disruptLoopsVars.angleSwitchInterval = 5.625; //could also reset to 2.8125, but this seems to cause a lot of 'stuck' bouncing.  22.5 also seems to cause stuck bounces, but 11.25 and 45 not as much
+    } else
+        Ball.disruptLoopsVars.disruptBounceAnglesBy += 0.0625
+
+    Ball.disruptLoopsVars.vars.unshift({
+        disruptBounceAnglesBy: Ball.disruptLoopsVars.disruptBounceAnglesBy,
+        angleSwitchInterval: Ball.disruptLoopsVars.angleSwitchInterval,
+        angleMargin: Ball.disruptLoopsVars.angleMargin,
+        distanceMargin: Ball.disruptLoopsVars.distanceMargin,
+    });
+    Ball.disruptLoopsVars.vars[1].next = Ball.disruptLoopsVars.vars[0];
+
+    //console.log("vars length: " + Ball.disruptLoopsVars.vars.length + "\tdisruptBounceAnglesBy: " + Ball.disruptLoopsVars.disruptBounceAnglesBy.toFixed(4) + "  \tangleSwitchInterval: " + Ball.disruptLoopsVars.angleSwitchInterval.toFixed(4) + "  \tangleMargin: " + Ball.disruptLoopsVars.angleMargin.toFixed(4) + "  \tdistanceMargin: " + Ball.disruptLoopsVars.distanceMargin);
+
+}
+
+Ball.dribbleRadiusMultiplier_thisSurface = 2;
+Ball.dribbleRadiusMultiplier_otherSurface = 3;
+Ball.dribbleEscapeThreshold = 8;  //the bounceLog index which needs to be part of the dribble loop in order to trigger an escape
+Ball.prototype.disruptDribbleBounces = function(surface) {
+    /* returns true if the current bounce should be invoked on block
+     * AKA prevents rapidly repeated bounces on the same surface from counting as "bounces" to the block's hits counter
+     * Repeated bounce must be at least the radius (times multiplier) away from the previous bounce on this surface
+     * UNLESS there is an intervening bounce on any other surface greater than that radius away
+     */
+
+    let notDribble = true;
+    let i = 0; //start at index 1 (last bounce) after initial ++i...
+    while(true) {
+        if (++i >= this.bounceLog.positions.length) {
+            if (notDribble) {
+                // neccessary here to catch newly fired balls with small or non-existent bounceLog
+                // aka didn't have a log entry that would satisfy the distance/radius condition below to force a premature 'return'
+                this.bounceLog.current.includesNonDribble = true;
+                return true;
+
+            } else if (this.bounceLog.current.dribbleEscape || i <= Ball.dribbleEscapeThreshold) return false;
+             // in case of a redundant escape (^^^), repeated surface or recurssion (since this function invokes startComplexBounce -> finishComplexBounce -> disruptDribbleBounce)
+             // also neccessary for newly fired balls with small bounceLogs and an immediate dribble sequence (second condition: --i <= Escape Threshold)
+
+            else break; //STUCK BALL
+        }
+
+        if (this.bounceLog.details[i].collisionSurfaces.includes(surface)) { //bounce on the current surface
+            if (this.bounceLog.positions[i].distanceTo(this) > this.radius * Ball.dribbleRadiusMultiplier_thisSurface) {
+                if (notDribble) {
+                    this.bounceLog.current.includesNonDribble = true;
+                    return true;
+
+                } else {
+                    if (i > Ball.dribbleEscapeThreshold && !this.bounceLog.current.dribbleEscape) break; //STUCK BALL (note: the current index is the first non-dribble bounce)
+                    return false;
+                }
+            } else if(notDribble) {  // condition is to avoid redundant execution
+                notDribble = false;
+                this.bounceLog.current.includesDribble = true;
+                //this bounce is a dribble, but continue iterating to check if ball is stuck
+
+                //console.log("dribble bounce disrupted"); // this.warning += 10; this.board.engine.slowDown();
+            }
+        } else { // bounced on a different surface
+            if (this.bounceLog.positions[i].distanceTo(this) > this.radius * Ball.dribbleRadiusMultiplier_otherSurface) {
+                if (notDribble) {
+                    this.bounceLog.current.includesNonDribble = true;
+                    return true;
+
+                } else {
+                    if (i > Ball.dribbleEscapeThreshold && !this.bounceLog.current.dribbleEscape) break; //STUCK BALL (note: the current index is the first non-dribble bounce)
+                    return false;
+                }
+            }
+        }
+    }
+
+
+    //STUCK BALL!  Must escape from ongoing dribble loop
+    this.warning += 20;
+    this.draw();
+    console.log("Ball appears to be stuck in dribble loop:");
+    console.log(this);
+    //this.board.engine.slowDown();
+
+
+    // iterate over bounce log, and identify all surfaces involved in the dribble loop
+    let originalIncomingVector;
+    let minIndex = i; //first index of potential originalIncomingVector candidates
+    for (i = 0; i < this.bounceLog.details.length; i++) {
+        let details = this.bounceLog.details[i];
+        let position = this.bounceLog.positions[i];
+
+        originalIncomingVector = true;
+        for (let dribbleSurface of this.collisionSurfaces) {
+            if (i < minIndex
+                || details.includesDribble
+                || details.collisionSurfaces.includes(dribbleSurface)
+                || position.distanceTo(this) <= this.radius * Ball.dribbleRadiusMultiplier * 2) {
+            // If true: this bounce is part of the ongoing dribble loop
+            // Note: radius for the dribble loop is expanded x2 for identifying surfaces involved
+                originalIncomingVector = false;
+                for (let surface of details.collisionSurfaces) {
+                    //add all surfaces to collisionSurfaces array, skipping duplicates
+                    if (!this.collisionSurfaces.includes(surface)) this.collisionSurfaces.push(surface);
+                }
+            }
+        }
+        if (originalIncomingVector) break;
+    }
+
+
+    //bounce log
+    this.bounceLog.current.bounceAngle = this.direction.degrees;
+    this.bounceLog.current = {
+        dribbleEscape: true,
+        preEscapeLog: this.bounceLog.current,
+        includesNonDribble: this.bounceLog.current.includesNonDribble,
+        includesDribble: this.bounceLog.current.includesDribble,
+        cornerAdjustments: new Array(),
+        collisionSurfacesCulledByDribbleEscape: []
+        //collisionSurfaces is not added yet because it is modifed below
+    };
+
+    //determine composite bounce range
+    this.collisionSurfaces.sort((a, b) => { //sort by bounce priority first, then by order appearing
+        let aOriginal = this.bounceLog.current.preEscapeLog.collisionSurfaces.includes(a);
+        let bOriginal = this.bounceLog.current.preEscapeLog.collisionSurfaces.includes(b);
+        if (aOriginal !== bOriginal) return bOriginal - aOriginal; // true - false === 1    false - true === -1
+        else if (a.bouncePriority !== b.bouncePriority) return a.bouncePriority - b.bouncePriority;
+        else return (this.collisionSurfaces.indexOf(a) - this.collisionSurfaces.indexOf(b));
+    });
+
+    let compositeBounceRange = this.collisionSurfaces[0].bounceRange;
+    for (let ar = 1; ar < this.collisionSurfaces.length; ar++) {//ar = angleRange
+        let prevComposite = compositeBounceRange;
+        compositeBounceRange = AngleRange.overlappingRange(prevComposite, this.collisionSurfaces[ar].bounceRange);
+        if (compositeBounceRange === undefined) {
+            if (this.bounceLog.current.preEscapeLog.collisionSurfaces.includes(this.collisionSurfaces[ar])) {
+                console.log("unexpected conflict between surface bounce ranges during dribble escape:");
+                console.log(this.collisionSurfaces[ar]);
+            } else {
+                this.bounceLog.current.collisionSurfacesCulledByDribbleEscape.push(...this.collisionSurfaces.splice(ar, 1));
+                ar--;
+            }
+            compositeBounceRange = prevComposite;
+        }
+    }
+    this.bounceLog.current.collisionSurfaces = [...this.collisionSurfaces]; //collisionSurfaces array is finalized for this operation
+
+    //determine incoming angle candidates to use for complex bounce
+    let incomingAngleCandidates;
+    if (originalIncomingVector) { // original incoming vector (pre-dribble) was found
+        if (i >= this.bounceLog.incomingAngles.length) throw new Error("Unexpected conditional branch while escaping dribble"); //possibly due to inconsistancy between bounceLog.positions and bounceLog.incomingAngles ???
+        incomingAngleCandidates = [ this.bounceLog.incomingAngles[i], ,
+                                    this.bounceLog.incomingAngles[i + 1] ?? this.bounceLog.incomingAngles[i], ,
+                                    this.bounceLog.incomingAngles[i - 1] ?? this.bounceLog.incomingAngles[i]    ];
+
+        incomingAngleCandidates[1] = Angle.acuteMidpoint(incomingAngleCandidates[0], incomingAngleCandidates[2]); // original - previous midPoint
+        incomingAngleCandidates[3] = Angle.acuteMidpoint(incomingAngleCandidates[0], incomingAngleCandidates[4]); //orig - next midPoint
+        incomingAngleCandidates[5] = Angle.acuteMidpoint(incomingAngleCandidates[1], incomingAngleCandidates[3]); //mid-point of midpoints
+        incomingAngleCandidates[6] = Angle.acuteMidpoint(incomingAngleCandidates[1], incomingAngleCandidates[4]); //o-p - next midpoint 
+        incomingAngleCandidates[7] = Angle.acuteMidpoint(incomingAngleCandidates[3], incomingAngleCandidates[2]); //o-n - prev midpoint
+        incomingAngleCandidates[8] = Angle.acuteMidpoint(incomingAngleCandidates[2], incomingAngleCandidates[4]); //prev-next midpoint
+
+    } else { //original incoming vector was not found -- bounceLog is entirely composed of the ongoing dribble loop!
+        if (i < this.bounce.logLength) {
+            console.log("first bounce out of the cannon was part of the dribble loop!");
+            console.log(this);
+        }
+
+        //use midpoints of back and forth angles to extrapolate incoming angle candidates
+        let midPoints = this.bounceLog.incomingAngles.map((ang1, index, array) => {
+            if (index < array.length - 1) return Angle.acuteMidpoint(ang1 - 180, array[index + 1] - 180, compositeBounceRange) + 180;
+            else return Angle.acuteMidpoint(ang1 - 180, array[0] - 180, compositeBounceRange) + 180;
+
+        });
+        incomingAngleCandidates = [myMean(midPoints)];
+
+        //try filtering down to only midpoint angles within acceptable incoming angle range
+        midPoints = midPoints.filter(midpoint => compositeBounceRange.inRange(midpoint + 180, false, false, false));
+        if (midPoints.length > 0) incomingAngleCandidates.push(myMean(midPoints));
+    }
+
+    //center of composite bounce range, inverted.  This is virtually guarenteed to be in-range, in case all of the other candidates fail.
+    //....only scenario in which it is NOT in-range is if bounceRange.min.degrees === bounceRange.max.degrees
+    incomingAngleCandidates.push((compositeBounceRange.min.degrees + compositeBounceRange.max.degrees) / 2 - 180);
+
+    for (let candidate of incomingAngleCandidates) {
+        if (candidate === undefined || !compositeBounceRange.inRange(candidate + 180, false, false, false)) continue;
+
+        incomingAngleCandidates.result = candidate;
+        break;
+    }
+
+    if (incomingAngleCandidates.result === undefined) throw new Error("could not determine a suitable original incoming angle during dribble escape");
+    this.direction.degrees = incomingAngleCandidates.result;
+
+    this.bounceLog.positions.shift();
+    this.bounceLog.incomingAngles.shift();
+    this.bounceLog.details.shift();
+
+    this.startComplexBounce(false, true);
+    this.collisionSurfaces = [...this.bounceLog.current.preEscapeLog.collisionSurfaces]; //restore old list, to prevent unwanted culling of surfaces in intersectionsCache.findNextCollision() -> verifySurfaces()
+    return notDribble;
+}
+
+
+Ball.prototype.startComplexBounce = function (invokeBounceOnBlocks, dribbleEscape = false) {
+    if (invokeBounceOnBlocks || dribbleEscape) frameComplexBounceCounter++;
+    ////console.log("using complex bounce method, more than one surface.   BALL ID: " + this.id);
+
+    let bounceOn = getExposedBounceSurfacesAngles(this);
+    let bounceAngle = calcComplexBounceAngle(bounceOn);
+    if (bounceAngle === undefined) return false;
+
+    let finalBounceSurfaces = bounceOn.surfaces.clockwise.concat(bounceOn.surfaces.counterclockwise);
+
+    if (validateComplexBounce(bounceAngle, bounceOn))
+        return this.finishComplexBounce(bounceAngle, bounceOn, finalBounceSurfaces, invokeBounceOnBlocks);
+    else {
+        //this.warning += 3;
+
+
+        let priorities = prioritizeSurfaces(bounceOn);
+
+        
+        this.bounceLog.current.complexBounce = {
+            ball: this,
+            ball_collisionSurfaces: [...this.collisionSurfaces],
+            incomingAngle: this.direction.toString(),
+            incomingVector: this.vector.toString(),
+            bounceOn: {
+                surfaces: { clockwise: [...bounceOn.surfaces.clockwise], counterclockwise: [...bounceOn.surfaces.counterclockwise], buried: [...bounceOn.surfaces.buried] },
+                angles: { clockwise: [...bounceOn.angles.clockwise], counterclockwise: [...bounceOn.angles.counterclockwise] }
+            },
+            initialBounceAngle: Angle.stringFromDeg(bounceAngle),
+            priorities: { ranks: [...priorities.ranks], compositeBounceRangesByRank: [...priorities.bounceRanges] }
+        }
+
+        let badRankIndex = 0;
+        let validated = false;
+        do {
+            badRankIndex = findNextBadRank(priorities, badRankIndex);
+            if (badRankIndex) cullBadRank(badRankIndex, priorities, bounceOn);
+            bounceAngle = calcComplexBounceAngle(bounceOn);
+            validated = validateComplexBounce(bounceAngle, bounceOn);
+        } while (!validated && badRankIndex)
+
+        //if (!validated) this.warning += 5;
+
+        if (dribbleEscape && !(validated || priorities.cumulativeBounceRanges[priorities.cumulativeBounceRanges.length - 1].inRange(bounceAngle))) {
+            //may want to consider making this the code for all instances, not just dribble escape
+            // 4-27-21 UPDATE: using the established method FIRST, then re-invoking with dribbleEscape = true if unable to resolve
+            bounceOn.unboundAngles = bounceOn.angles;
+            bounceOn.angles = { clockwise: [...bounceOn.angles.clockwise], counterclockwise: [...bounceOn.angles.counterclockwise] };
+            badRankIndex = priorities.cumulativeBounceRanges.length - 1;
+
+            while (!(validated || priorities.cumulativeBounceRanges[priorities.cumulativeBounceRanges.length - 1].inRange(bounceAngle)) && badRankIndex >= 0) {
+                while (priorities.ranks[badRankIndex] % 1 > 0) { badRankIndex--; }
+                if (badRankIndex < 0) break;
+                bindNextRank(badRankIndex--, priorities, bounceOn);
+                bounceAngle = calcComplexBounceAngle(bounceOn);
+                validated = validateComplexBounce(bounceAngle, bounceOn);
+            }
+
+
+        }
+
+        while (!(validated || priorities.cumulativeBounceRanges[priorities.cumulativeBounceRanges.length - 1].inRange(bounceAngle)) && priorities.cumulativeBounceRanges.length > 1) {
+            cullBadRank(priorities.cumulativeBounceRanges.length - 1, priorities, bounceOn);
+            bounceAngle = calcComplexBounceAngle(bounceOn);
+            validated = validateComplexBounce(bounceAngle, bounceOn, false, false, false); //validate without edge inclusivity
+        }
+
+        if (!validated) { //try binding the bounce angles from the highest-ranking surfaces
+            cullBadRank(priorities.cumulativeBounceRanges.length - 1, priorities, bounceOn); // the cull function will not remove surfaces or bounceRanges of rank index zero (highest priority), it will just bind their bounce angles to their combined bounce range
+            bounceAngle = calcComplexBounceAngle(bounceOn);
+            if (!validateComplexBounce(bounceAngle, bounceOn)) {
+                console.log("\nWARNING: could not resolve surface bounceRange and actual bounceAngle conflict\nUsed Bounce Angle: " + Angle.stringFromDeg(bounceAngle) + "\n");
+                console.log(this.bounceLog.current.complexBounce);
+                if (dribbleEscape) throw new Error("Invalid bounce angle or surface bounce ranges!  Dribble escape protocals unable to resovle this");
+                else return this.startComplexBounce(invokeBounceOnBlocks, true);
+            }
+        }
+
+        return this.finishComplexBounce(bounceAngle, bounceOn, finalBounceSurfaces, invokeBounceOnBlocks);
+        
+    }
+}
+
+function calcComplexBounceAngle(bounceOn) {
+    if (bounceOn.angles.clockwise.length > 0) {
+        if (bounceOn.angles.counterclockwise.length > 0)
+            return (myMean(bounceOn.angles.clockwise) + myMean(bounceOn.angles.counterclockwise)) / 2;
+        else
+            return myMean(bounceOn.angles.clockwise);
+    } else if (bounceOn.angles.counterclockwise.length > 0) {
+        return myMean(bounceOn.angles.counterclockwise);
+    } else return undefined;
+}
+
+function validateComplexBounce(bounceAngle, bounceOn, strict = false, minInclusive = true, maxInclusive = true) {
+    for (let i = 0; i < bounceOn.surfaces.clockwise.length; i++) {
+        if (!bounceOn.surfaces.clockwise[i].bounceRange.inRange(bounceAngle, strict, minInclusive, maxInclusive)) return false;
+    }
+    for (let i = 0; i < bounceOn.surfaces.counterclockwise.length; i++) {
+        if (!bounceOn.surfaces.counterclockwise[i].bounceRange.inRange(bounceAngle, strict, minInclusive, maxInclusive)) return false;
+    }
+    for (let i = 0; i < bounceOn.surfaces.buried.length; i++) {
+        if (!bounceOn.surfaces.buried[i].bounceRange.inRange(bounceAngle, strict, minInclusive, maxInclusive)) return false;
+    }
+    return true;
+}
+
+function prioritizeSurfaces(bounceOn) {
+    let priorities = {
+        ranks: new Array(),
+        bounceRanges: new Array(),
+        cumulativeBounceRanges: new Array(),
+    }
+    let i = undefined;
+    let offset = 0; //set to 0.5 for buried surfaces
+    let searchSurfaces = (surfaceOrCorner) => {
+        let rank = surfaceOrCorner.bouncePriority + offset
+        if ((i = priorities.ranks.indexOf(rank)) === -1) {
+            i = 0;
+            while (i < priorities.ranks.length && rank > priorities.ranks[i]) { i++; } //puts in ascending order
+            priorities.ranks.splice(i, 0, rank);
+            //if (surfaceOrCorner.isCorner) surfaceOrCorner.bounceRange.setXOvers() //NOTE: I think this is no longer the case --- corner bounce ranges need to have their crossovers restored to default, since they are often changed in the modifiedNearCornerBlockBounce function
+            priorities.bounceRanges.splice(i, 0, surfaceOrCorner.bounceRange);
+        } else if (priorities.bounceRanges[i]) {
+            //if (surfaceOrCorner.isCorner) surfaceOrCorner.bounceRange.setXOvers() //see above note
+            priorities.bounceRanges[i] = AngleRange.overlappingRange(priorities.bounceRanges[i], surfaceOrCorner.bounceRange); //when a corner, this utilizes the self-referential corner?BounceRange.bounceRange
+        }
+    };
+    bounceOn.surfaces.clockwise.forEach(searchSurfaces);
+    bounceOn.surfaces.counterclockwise.forEach(searchSurfaces);
+    offset = 0.5;
+    bounceOn.surfaces.buried.forEach(searchSurfaces);
+    priorities.cumulativeBounceRanges.length = priorities.ranks.length;
+    return priorities;
+}
+
+function findNextBadRank(priorities, i) { // i = starting Index
+    priorities.cumulativeBounceRanges.length = priorities.ranks.length;
+    if (i === 0) {
+        if (priorities.bounceRanges[0] === undefined) {
+            console.log(priorities);
+            throw new Error("highest priority bounce range is undefinable!!");
+        }
+        priorities.cumulativeBounceRanges[0] = priorities.bounceRanges[0];
+        i = 1;
+    }
+    for (; i < priorities.ranks.length; i++) {
+        priorities.cumulativeBounceRanges[i] = AngleRange.overlappingRange(priorities.cumulativeBounceRanges[i - 1], priorities.bounceRanges[i]);
+        if (priorities.cumulativeBounceRanges[i] === undefined) return i;
+    }
+    return false;
+}
+
+function cullBadRank(index, priorities, bounceOn) {
+    let badRank = priorities.ranks[index];
+    if (badRank % 1 === 0) { //for exposed surfaces
+        for (let dir of ["clockwise", "counterclockwise"]) {
+            for (let i = 0; i < bounceOn.surfaces[dir].length; i++) {
+                if (bounceOn.surfaces[dir][i].bouncePriority === badRank) {
+                    bounceOn.angles[dir][i] = priorities.cumulativeBounceRanges[Math.max(index - 1, 0)].bind(bounceOn.angles[dir][i]);
+                    bounceOn.angles[dir][i] = bounceOn.angles.range.transform(bounceOn.angles[dir][i]);
+                    if (index > 0) {
+                        bounceOn.surfaces[dir].splice(i, 1);
+                        bounceOn.angles[dir].push(bounceOn.angles[dir].splice(i, 1)[0]); //move to the end of the array, so indexes with surfaces still in the array match
+                        i--;
+                    }
+                }
+            }
+        }
+    } else if (badRank % 1 === 0.5) { //for buried surfaces
+        badRank -= 0.5
+        for (let i = 0; i < bounceOn.surfaces.buried.length; i++) {
+            if (bounceOn.surfaces.buried[i].bouncePriority === badRank) {
+                bounceOn.surfaces.buried.splice(i, 1);
+                i--;
+            }
+        }
+    } else throw new Error("unexpected rank value in cullBadRank function");
+    if (index > 0) {
+        priorities.ranks.splice(index, 1);
+        priorities.bounceRanges.splice(index, 1);
+        priorities.cumulativeBounceRanges.splice(index, 1);
+    }
+}
+
+function bindNextRank(rankIndex, priorities, bounceOn) {
+    let rank = priorities.ranks[rankIndex];
+    let bounceRange = priorities.cumulativeBounceRanges[priorities.cumulativeBounceRanges.length - 1];
+    for (let dir of ["clockwise", "counterclockwise"]) {
+        for (let i in bounceOn.angles[dir]) {
+            if (bounceOn.surfaces[dir][i].bouncePriority === rank)
+                bounceOn.angles[dir][i] = bounceRange.bind(bounceOn.unboundAngles[dir][i]);
+        }
+    }
+}
+
+Ball.prototype.finishComplexBounce = function (bounceAngle, bounceOn, finalBounceSurfaces, invokeBounceOnBlocks) {
+    if (!Number.isFinite(bounceAngle)) { console.log("finishComplexBounce recieved an invalid bounceAngle, returning false."); return false; }
+
+    bounceOn.inRange = (ang, strict = false, minInclusive = true, maxInclusive = true) => { return validateComplexBounce(ang, bounceOn, strict, minInclusive, maxInclusive); }
+    bounceOn.transform = (ang) => { return bounceOn.angles.range.transform(ang); }
+    //these functions are used by the disruptLoops function to ensure a (slight) variation of the bounce angle is still within bounce range
+
+    this.direction.degrees = this.disruptLoops(bounceAngle, bounceOn);
+
+    for (let i = 0; i < finalBounceSurfaces.length; i++) { //call bounce method on the block(s)
+        let surfaceNotRedundant = true; //needed to avoid redundant calls to disruptDribbleBounces.  The same surface may appear in both clockwise and counterclockwise arrays, therefore appears twice here
+        let blockNotRedundant = true;
+        for (let j = 0; j < i; j++) { //tests if this block has already had 'bounce' method called on it, and if the surfaces has already had dribble test
+            if (finalBounceSurfaces[i] === finalBounceSurfaces[j]) {
+                surfaceNotRedundant = false;
+                break;
+
+            } else if (finalBounceSurfaces[i].block === finalBounceSurfaces[j].block) {
+                blockNotRedundant = false;
+                break;
+            }
+        }
+        if (surfaceNotRedundant) {
+            if (this.disruptDribbleBounces(finalBounceSurfaces[i]) && blockNotRedundant && invokeBounceOnBlocks)
+                finalBounceSurfaces[i].block?.bounce(this, finalBounceSurfaces);
+        }
+    }
+
+    this.bounceLog.current.bounceAngle = this.direction.degrees;
+    return true;
+}
+
+function getExposedBounceSurfacesAngles(ball) {
+    let collisionSurfaces = ball.collisionSurfaces;
+    let incomingAngle = ball.direction;
+
+    let angleRange = incomingAngle.variableRangeThisXOver();
+    let incomingAngleInv = incomingAngle.inv(angleRange); //direction turned 180 (the direction it came from)
+    let cwAngles = new Array(); //bounce angle(s), from the nearest clockwise surface(s)
+    let ccwAngles = new Array(); // bounce angle(s), from the nearest counter-clockwise surface(s)
+    let cwSurfaces = new Array();
+    let ccwSurfaces = new Array();
+    let buriedSurfaces = new Array();
+    let nearestCWsurface = undefined; //surface angle
+    let nearestCCWsurface = undefined; //surface angle
+
+    ////console.log("NEW getExposedBounceSurfacesAngles function call\n" + ball + "\n" + collisionSurfaces + "\n" + bouncePoint + "\n" + incomingAngle)
+
+    for (let i = 0; i < collisionSurfaces.length; i++) {
+        //we are trying to find the two surfaces whose angles are closest (in each direction) of the angle which the vector came from, on the condition that the surface provides a bounce angle
+        let bounceAngle = collisionSurfaces[i].bounceAngle(ball);
+        if (bounceAngle.incomingAngle) continue;
+        else bounceAngle = angleRange.transform(bounceAngle);
+
+        let surfaceAngles = collisionSurfaces[i].getSurfaceAnglesAt(ball.currentPosition);
+        surfaceAngles.push(surfaceAngles[0] - 360, surfaceAngles[0] + 360, surfaceAngles[1] - 360, surfaceAngles[1] + 360);
+
+        for (let a = 0; a < 6; a++) {
+            if (surfaceAngles[a] < incomingAngleInv) { //surface is clockwise of incoming vector
+                if (nearestCWsurface !== undefined && surfaceAngles[a] < nearestCWsurface) continue;
+                if (nearestCWsurface === undefined || surfaceAngles[a] > nearestCWsurface) {
+                    nearestCWsurface = surfaceAngles[a];
+                    cwAngles.length = 0;
+                    cwSurfaces.length = 0;
+                } else if (surfaceAngles[a] !== nearestCWsurface) throw new Error("problem in getExposedBounceSurfacesAngles function of engine.bounce module");
+                cwAngles.push(bounceAngle);
+                cwSurfaces.push(collisionSurfaces[i]);
+
+            } else if (surfaceAngles[a] > incomingAngleInv) { //surface is counter-clockwise of incoming vector
+                if (nearestCCWsurface !== undefined && surfaceAngles[a] > nearestCCWsurface) continue;
+                if (nearestCCWsurface === undefined || surfaceAngles[a] < nearestCCWsurface) {
+                    nearestCCWsurface = surfaceAngles[a];
+                    ccwAngles.length = 0;
+                    ccwSurfaces.length = 0;
+                } else if (surfaceAngles[a] !== nearestCCWsurface) throw new Error("problem in getExposedBounceSurfacesAngles function of engine.bounce module");
+                ccwAngles.push(bounceAngle);
+                ccwSurfaces.push(collisionSurfaces[i]);
+
+            } else if (surfaceAngles[a] === incomingAngleInv) {
+                if ((collisionSurfaces[i].corner2.surfaceAngle - incomingAngleInv) % 360 === 0) { //considered clockwise
+                    if (nearestCWsurface === undefined || surfaceAngles[a] > nearestCWsurface) {
+                        nearestCWsurface = surfaceAngles[a];
+                        cwAngles.length = 0;
+                        cwSurfaces.length = 0;
+                    } else if (surfaceAngles[a] !== nearestCWsurface) throw new Error("problem in getExposedBounceSurfacesAngles function of engine.bounce module");
+                    cwAngles.push(bounceAngle);
+                    cwSurfaces.push(collisionSurfaces[i]);
+
+                } else if ((collisionSurfaces[i].corner1.surfaceAngle - incomingAngleInv) % 360 === 0) { //considered counter-clockwise
+                    if (nearestCCWsurface === undefined || surfaceAngles[a] < nearestCCWsurface) {
+                        nearestCCWsurface = surfaceAngles[a];
+                        ccwAngles.length = 0;
+                        ccwSurfaces.length = 0;
+                    } else if (surfaceAngles[a] !== nearestCCWsurface) throw new Error("problem in getExposedBounceSurfacesAngles function of engine.bounce module");
+                    ccwAngles.push(bounceAngle);
+                    ccwSurfaces.push(collisionSurfaces[i]);
+
+                } else throw new Error("!!!!! incoming vector has the same angle as a surface and could not determine CW vs CCW   BALL ID: " + ball?.id);
+
+                console.log("!!!!! incoming vector has the same angle as a surface    BALL ID: " + ball?.id);
+                ball.warning += 10;
+                //board.engine.slowDown();
+            }
+        }
+    }
+
+
+    for (let i = 0; i < collisionSurfaces.length; i++) {
+        if (cwSurfaces.indexOf(collisionSurfaces[i]) === -1 && ccwSurfaces.indexOf(collisionSurfaces[i]) === -1) {
+            if (!collisionSurfaces[i]) throw new Error("undefined element in ball.collisionSurfaces array!");
+            buriedSurfaces.push(collisionSurfaces[i]);
+        }
+    }
+
+    //testing for corners, and substituting the corner bounce ranges for the surfaces if found.
+    let corner = undefined;
+    for (let i = 0; i < collisionSurfaces.length; i++) {
+        for (let j = i + 1; j < collisionSurfaces.length; j++) {
+            if (collisionSurfaces[i] === collisionSurfaces[j].next) {
+                if (collisionSurfaces[i].previous !== collisionSurfaces[j] || collisionSurfaces[i] === collisionSurfaces[j].previous || collisionSurfaces[i].next === collisionSurfaces[j])
+                    throw new Error("contradictory previous/next in surfaces, while identifying corners in getExposedSurfacesAngles");
+                corner = collisionSurfaces[i].corner1.blockRange;
+            } else if (collisionSurfaces[i] === collisionSurfaces[j].previous) {
+                if (collisionSurfaces[i].next !== collisionSurfaces[j] || collisionSurfaces[i].previous === collisionSurfaces[j])
+                    throw new Error("contradictory previous/next in surfaces, while identifying corners in getExposedSurfacesAngles");
+                corner = collisionSurfaces[i].corner2.blockRange;
+            } else if (collisionSurfaces[i].previous === collisionSurfaces[j] || collisionSurfaces[i].next === collisionSurfaces[j]) {
+                throw new Error("contradictory previous/next in surfaces, while identifying corners in getExposedSurfacesAngles");
+            } else continue;
+
+            if (!corner) continue;
+
+            let index = undefined;
+            if ((index = cwSurfaces.indexOf(collisionSurfaces[i])) > -1) cwSurfaces[index] = corner;
+            if ((index = cwSurfaces.indexOf(collisionSurfaces[j])) > -1) cwSurfaces[index] = corner;
+            if ((index = ccwSurfaces.indexOf(collisionSurfaces[i])) > -1) ccwSurfaces[index] = corner;
+            if ((index = ccwSurfaces.indexOf(collisionSurfaces[j])) > -1) ccwSurfaces[index] = corner;
+            if ((index = buriedSurfaces.indexOf(collisionSurfaces[i])) > -1) buriedSurfaces[index] = corner;
+            if ((index = buriedSurfaces.indexOf(collisionSurfaces[j])) > -1) buriedSurfaces[index] = corner;
+        }
+    }
+
+    return {
+        surfaces: {
+            clockwise: cwSurfaces,
+            counterclockwise: ccwSurfaces,
+            buried: buriedSurfaces
+        },
+        angles: {
+            clockwise: cwAngles,
+            counterclockwise: ccwAngles,
+            range: angleRange
+        }
+    };
+}
+
+initializeLogger?.("ball.bounce ran");

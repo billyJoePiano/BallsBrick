@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<!-- Remove for the minified version: !DOCTYPE, html, head, body, header -- plus wrappers <main> and <div id="consoleDiv"> (but keep their inner contents) -->
+<html>
+<head>
+  <title>HTML structure of web console, prettified</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" type="text/css" href="console.css" />
+  <style>
+    main, header, body, footer {
+      margin-left: 0;
+      margin-right: 0;
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    body, main {
+      padding: 0;
+      margin: 0;
+    }
+
+    #path, #label, #form {
+      font-family: monospace;
+      margin: 1em auto 1em;
+    }
+
+    #pageFrame {
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      margin: 0;
+      border: 1px solid black;
+    }
+  </style>
+</head>
+<body>
+  <header><iframe id="pageFrame">PAGE FRAME GOES HERE</iframe></header>
+  <main>
+    <div id="consoleDiv" style="height: 500px">
+      <div id="commandLineContainer">
+        <button id="submitCommandLine">&gt;</button>
+        <textarea id="commandLine"></textarea>
+        <button id="clearCommandLine">X</button>
+      </div>
+
+      <div id="buttonsContainer">
+        <button id="returnAction" class="off arrowFont">&#8629;&gt;</button>
+
+        <button class="shortcut">=</button>
+        <button class="shortcut">.</button>
+        <button class="shortcut">,</button>
+        <button class="shortcut">"</button>
+        <button class="shortcut">(</button>
+        <button class="shortcut">)</button>
+        <button class="shortcut">[</button>
+        <button class="shortcut">]</button>
+        <button class="shortcut">+</button>
+        <button class="shortcut">-</button>
+        <button class="shortcut">*</button>
+        <button class="shortcut">/</button>
+        <button class="shortcut">></button>
+        <button class="shortcut"><</button>
+        <button class="shortcut">%</button>
+        <button class="shortcut">!</button>
+        <button class="shortcut">&</button>
+        <button class="shortcut">|</button>
+        <button class="shortcut">{</button>
+        <button class="shortcut">}</button>
+        <button class="shortcut">^</button>
+        <button class="shortcut">~</button>
+        <button class="shortcut">\</button>
+        <button class="shortcut">?</button>
+        <button class="shortcut">:</button>
+        <button class="shortcut">'</button>
+        <button class="shortcut">`</button>
+        <button class="shortcut">;</button>
+        <div id="_window_" class="buttonSubDiv">
+          <button id="window_" class="shortcutParent">window</button>
+          <button class="buttonSubDivXout">X</button>
+        </div>
+
+        
+        <div id="_document_" class="buttonSubDiv">
+          <button id="document_" class="shortcutParent">document</button>
+          <button class="buttonSubDivXout">X</button>
+          <button class="shortcut">.getElementById(" ")</button>
+          <button class="shortcut">.getElementsByTagName(" ")</button>
+          <button class="shortcut">.getElementsByClassName(" ")</button>
+        </div>
+
+        
+        <div id="_Object_" class="buttonSubDiv">
+          <button id="Object_" class="shortcutParent">Object</button>
+          <button class="buttonSubDivXout">X</button>
+          <button class="shortcut">.getOwnPropertyDescriptor( , "")</button>
+          <button class="shortcut">.getOwnPropertyDescriptors( )</button>
+          <button class="shortcut">.getOwnPropertyNames( )</button>
+          <button class="shortcut">.getOwnPropertySymbols( )</button>
+          <button class="shortcut">.getPrototypeOf( )</button>
+          <button class="shortcut">.defineProperty( , "", { })</button>
+          <button class="shortcut">.defineProperties( , { })</button>
+          <button class="shortcut">.keys( )</button>
+          <button class="shortcut">.entries( )</button>
+          <button class="shortcut">.seal( )</button>
+          <button class="shortcut">.freeze()</button>
+          <button class="shortcut">.create( , { })</button>
+          <button class="shortcut">.assign( , )</button>
+        </div>
+
+
+        <div id="textButtons">
+          <button id="grab">Grab a value</button>
+          <button id="options">Options</button>
+        </div>
+
+      </div>
+
+
+      <div id="optionsContainer">
+        <div id="optionsButtons"><button id="ok">OK</button><button id="apply">Apply</button><button id="cancel">Cancel</button></div>
+
+        <div class="border">
+          <span class="divLabel">Command line</span>
+          <table>
+            <tr><td><label for="commandLineHeight">Height</label></td><td><input type="number" id="commandLineHeight" value="1" /></td><td><input type="checkbox" id="commandLineHeightAuto" checked /><label for="commandLineHeightAuto">Auto-expand with more lines</label></td></tr>
+            <tr><td><label for="commandLineWidth">Width</label></td><td><input type="number" id="commandLineWidth" disabled /></td><td><input type="checkbox" id="commandLineWidthAuto" checked /><label for="commandLineWidthAuto">Auto-fit to viewport</label></td></tr>
+          </table>
+
+        </div>
+
+        <div class="border">
+          <span class="divLabel">Show entries in console</span>
+          <div class="border">
+            <span class="divLabel">Show by entry types</span>
+            <table>
+              <tbody>
+                <tr><td><input type="checkbox" id="showAll" checked /></td><td><label for="showAll">All</label></td></tr>
+                <tr><td>&nbsp;</td></tr>
+                <tr><td><input type="checkbox" id="showValidCommands" checked disabled /></td><td><label for="showCommands">Valid commands entered</label></td></tr>
+                <tr><td><input type="checkbox" id="showValidReturns" checked disabled /></td><td><label for="showReturns">Returns from valid commands</label></td></tr>
+                <tr><td><input type="checkbox" id="showInvalidCommands" disabled /></td><td><label for="showCommands">Invalid commands entered</label></td></tr>
+                <tr><td><input type="checkbox" id="showErrorReturns" disabled /></td><td><label for="showErrorCommands">Errors from invalid commands</label></td></tr>
+                <tr><td>&nbsp;</td></tr>
+                <tr><td><input type="checkbox" id="showRuntimeErrors" checked disabled /></td><td><label for="showRuntimeErrors">Runtime errors</label></td></tr>
+                <tr><td><input type="checkbox" id="showLogs" disabled /></td><td><label for="">console.log</label></td></tr>
+                <tr><td><input type="checkbox" id="showInfos" disabled /></td><td><label for="">console.info</label></td></tr>
+
+                <tr><td><input type="checkbox" id="showErrors" disabled /></td><td><label for="">console.error</label></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="border">
+            <span class="divLabel tall"><input type="checkbox" id="filterEntries" /><label for="filterEntries">Filter entries for:</label></span>
+            <table>
+              <tr><td><input type="checkbox" id="filterEntriesForNumbers" checked disabled /></td><td><label for="filterEntriesForNumber">Numbers</label></td></tr>
+              <tr><td><input type="checkbox" id="filterEntriesForBooleans" checked disabled /></td><td><label for="filterEntriesForBooleans">Booleans</label></td></tr>
+              <tr><td><input type="checkbox" id="filterEntriesForStrings" checked disabled /></td><td><label for="filterEntriesForStrings">Strings</label></td></tr>
+              <tr><td><input type="checkbox" id="filterEntriesForSymbols" checked disabled /></td><td><label for="filterEntriesForSymbols">Symbols</label></td></tr>
+              <tr><td><input type="checkbox" id="filterEntriesForObjects" checked disabled /></td><td><label for="filterEntriesForObjects">Objects</label></td></tr>
+              <tr><td><input type="checkbox" id="filterEntriesForFunctions" checked disabled /></td><td><label for="filterEntriesForFunctions">Functions</label></td></tr>
+              <tr><td><input type="checkbox" id="filterEntriesForUndefined" checked disabled /></td><td><label for="filterEntriesForUndefined">undefined</label></td></tr>
+              <tr><td><input type="checkbox" id="filterEntriesForNull" checked disabled /></td><td><label for="filterEntriesForNull">null</label></td></tr>
+              <tr><td><input type="checkbox" id="filterEntriesForCustom" disabled /></td><td><label for="filterEntriesForCustom">Custom filter:</label></td></tr>
+              <tr><td colspan="10"><input type="text" placeholder="callback(value)" id="filterEntriesCustomFunction" disabled /><p>returns boolean</p></td></tr>
+            </table>
+          </div>
+
+
+          <div class="border">
+            <span class="divLabel tall"><input type="checkbox" id="filterPairs" /><label for="filterPairs">Filter key-value pairs for:</label></span>
+            <table>
+              <tr><td><input type="checkbox" id="filterPairsForNumbers" checked disabled /></td><td><label for="filterPairsForNumber">Numbers</label></td></tr>
+              <tr><td><input type="checkbox" id="filterPairsForBooleans" checked disabled /></td><td><label for="filterPairsForBooleans">Booleans</label></td></tr>
+              <tr><td><input type="checkbox" id="filterPairsForStrings" checked disabled /></td><td><label for="filterPairsForStrings">Strings</label></td></tr>
+              <tr><td><input type="checkbox" id="filterPairsForSymbols" checked disabled /></td><td><label for="filterPairsForSymbols">Symbols</label></td></tr>
+              <tr><td><input type="checkbox" id="filterPairsForObjects" checked disabled /></td><td><label for="filterPairsForObjects">Objects</label></td></tr>
+              <tr><td><input type="checkbox" id="filterPairsForFunctions" checked disabled /></td><td><label for="filterPairsForFunctions">Functions</label></td></tr>
+              <tr><td><input type="checkbox" id="filterPairsForUndefined" checked disabled /></td><td><label for="filterPairsForUndefined">undefined</label></td></tr>
+              <tr><td><input type="checkbox" id="filterPairsForNull" checked disabled /></td><td><label for="filterPairsForNull">null</label></td></tr>
+              <tr><td><input type="checkbox" id="filterPairsForCustom" disabled /></td><td><label for="filterPairsForCustom">Custom filter:</label></td></tr>
+              <tr><td colspan="10"><input type="text" placeholder="callback(key, value)" id="filterPairsCustomFunction" disabled /><p>returns boolean</p></td></tr>
+            </table>
+          </div>
+          <!--  <tr><td><input type="checkbox" id="" /></td><td><label for=""></label></td></tr>  -->
+
+        </div>
+
+
+        <div class="border">
+          <span class="divLabel">Page frame size</span>
+          <table>
+            <tbody>
+              <tr><td><input type="checkbox" id="pageFrameAutosize" checked /></td><td><label for="pageFrameAutosize">Auto (window viewport size)</label></td></tr>
+              <tr>
+                <td><label for="pageFrameWidth">Width</label></td>
+                <td>
+                  <input type="number" id="pageFrameWidth" disabled value="400" />
+                  Viewport width: <span id="pageViewportWidth"></span>
+                </td>
+              </tr>
+
+              <tr>
+                <td><label for="pageFrameHeight">Height</label></td>
+                <td>
+                  <input type="number" id="pageFrameHeight" value="500" disabled />
+                  Viewport height: <span id="pageViewportHeight"></span>
+                </td>
+              </tr>
+
+            </tbody>
+          </table>
+          <button id="pageFrameHover" class="floatBottom">Hover over</button>
+          <div class="clearFloat">
+            <input type="checkbox" id="pageFrameLiveResize" disabled />
+            <label for="pageFrameLiveResize">Live resize on change</label>
+            <p>NOTE: This will trigger resize event listeners in the frame</p>
+          </div>
+        </div>
+
+
+        <div class="border">
+          <span class="divLabel">Console frame size</span>
+          <table>
+            <tbody>
+              <tr><td><input type="checkbox" id="consoleFrameAutosize" checked /></td><td><label for="consoleFrameAutosize">Auto (window viewport size)</label></td></tr>
+              <tr>
+                <td><label for="consoleFrameWidth">Width</label></td>
+                <td>
+                  <input type="number" id="consoleFrameWidth" value="400" disabled />
+                  Viewport width: <span id="consoleViewportWidth"></span>
+                </td>
+              </tr>
+
+              <tr>
+                <td><label for="consoleFrameHeight">Height</label></td>
+                <td>
+                  <input type="number" id="consoleFrameHeight" value="500" disabled />
+                  Viewport height: <span id="consoleViewportHeight"></span>
+                </td>
+              </tr>
+
+            </tbody>
+          </table>
+          <button id="consoleFrameHover" class="floatBottom">Hover over</button>
+          <div class="clearFloat">
+            <input type="checkbox" id="consoleFrameLiveResize" disabled />
+            <label for="consoleFrameLiveResize">Live resize on change</label>
+          </div>
+        </div>
+
+
+        <div class="border">
+          <span class="divLabel">Orientation</span>
+          <table>
+            <tr>
+              <td><label for="consoleOrientation">Console</label></td>
+              <td>
+                <select id="consoleOrientation">
+                  <option value="true">Below page frame (if applicable) &nbsp; DEFAULT</option>
+                  <option value="false">Above page frame (if applicable)</option>
+                </select>
+              </td>
+              <td></td>
+            </tr>
+
+            <tr>
+              <td><label for="commandLineOrientation">Command line</label></td>
+              <td>
+                <select id="commandLineOrientation" disabled>
+                  <option value="true">Mobile-friendly: Top, above console output</option>
+                  <option value="false">Traditional: Bottom, below console output</option>
+                </select>
+              </td>
+              <td><input type="checkbox" id="commandLineOrientationDefault" checked /><label for="commandLineOrientationDefault" class="checkboxLabel">Default from console</label></td>
+            </tr>
+
+            <tr>
+              <td><label for="consoleOutputOrientation">Console output</label></td>
+              <td>
+                <select id="consoleOutputOrientation" disabled>
+                  <option value="true">Mobile-friendly: Inverted, Most recent (top) to oldest (bottom)</option>
+                  <option value="false">Traditional: Oldest (top) to most recent (bottom)</option>
+                </select>
+              </td>
+              <td><input type="checkbox" id="consoleOutputOrientationDefault" checked /><label for="consoleOutputOrientationDefault" class="checkboxLabel">Default from command line</label></td>
+            </tr>
+
+            <tr>
+              <td><label for="groupOrientation">Within output grouping</label></td>
+              <td>
+                <select id="groupOrientation">
+                  <option value="true">Traditional: First (top) to last (bottom)</option>
+                  <option value="false">Inverted: Last (top) to first (bottom)</option>
+                </select>
+              </td>
+              <td></td>
+            </tr>
+
+            <tr>
+              <td><label for="optionsButtonsOrientation">Command buttons orientation</label></td>
+              <td>
+                <select id="optionsButtonsOrientation">
+                  <option value="outside">Outside command line and console output &nbsp; DEFAULT</option>
+                  <option value="between">Between command line and console output</option>
+                  <option value="opposite">Opposite from command line (over console output)</option>
+                  <option value="above">Above command line</option>
+                  <option value="below">Below command line</option>
+                  <option value="top">Top (But below page frame, if applicable)</option>
+                  <option value="bottom">Bottom (But above page frame, if applicable)</option>
+                  <option value="veryTop">Very top (above page frame, if applicable)</option>
+                  <option value="veryBottom">Very bottom (below page frame, if applicable)</option>
+                </select>
+              </td>
+          </table>
+        </div>
+      </div>
+      <div id="consoleOutput"></div>
+    </div>
+  </main>
+</body>
+</html>
